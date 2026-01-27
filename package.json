@@ -1,0 +1,48 @@
+{
+  "name": "satsflow-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Satsflow - Period tracking app with Bitcoin Lightning rewards and community features",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed": "node src/database/seeds/index.js",
+    "lint": "eslint src/",
+    "format": "prettier --write \"src/**/*.js\"",
+    "test": "echo \"Tests coming soon\" && exit 0",
+    "generate-key": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+  },
+  "keywords": [
+    "period-tracking",
+    "health",
+    "bitcoin",
+    "lightning-network",
+    "api",
+    "express",
+    "supabase"
+  ],
+  "author": "Dada Developers",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.93.1",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.3.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "nodemailer": "^7.0.12",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.8.1"
+  }
+}
