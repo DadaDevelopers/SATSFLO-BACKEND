@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-console.log('\n🔐 SATSFLOW BACKEND - Security Keys Generator\n');
+console.log('\n SATSFLOW BACKEND - Security Keys Generator\n');
 console.log('=' .repeat(60));
 
 // Generate JWT Secret (for access tokens)

@@ -35,7 +35,7 @@ async function startServer() {
       console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   🌸 SATSFLOW API SERVER                                  ║
+║   SATSFLOW API SERVER                                  ║
 ║                                                           ║
 ║   Status:      Running                                    ║
 ║   Port:        ${PORT}                                        ║
