@@ -1,0 +1,1530 @@
+{
+	"info": {
+		"_postman_id": "satsflow-api-collection",
+		"name": "Satsflow API",
+		"description": "Complete API collection for Satsflow - Period & Fertility Tracking Backend\n\n## Base URL\n- Local: http://localhost:3000/api/v1\n\n## Authentication\nMost endpoints require a Bearer token. After login, the access token is automatically saved to the collection variable.\n\n## Rate Limits\n- General: 100 requests/15 minutes\n- Auth endpoints: 5 requests/15 minutes\n- Sensitive data: 30 requests/minute",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "accessToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refreshToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "cycleId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "symptomId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "moodId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Check if the API server is running and healthy."
+					},
+					"response": []
+				},
+				{
+					"name": "API Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/",
+							"host": ["{{baseUrl}}"],
+							"path": [""]
+						},
+						"description": "Get API information and available endpoints."
+					},
+					"response": []
+				}
+			],
+			"description": "Health check and API info endpoints"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.tokens) {",
+									"        pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+									"        pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+									"    }",
+									"    if (jsonData.data && jsonData.data.user) {",
+									"        pm.collectionVariables.set('userId', jsonData.data.user.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"testuser@example.com\",\n    \"password\": \"SecurePass123\",\n    \"confirmPassword\": \"SecurePass123\",\n    \"name\": \"Jane Doe\",\n    \"dateOfBirth\": \"1995-05-15\",\n    \"acceptTerms\": \"true\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new user account.\n\n**Password Requirements:**\n- Minimum 8 characters\n- At least one uppercase letter\n- At least one lowercase letter\n- At least one number\n\n**Rate Limit:** 5 requests/hour"
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.tokens) {",
+									"        pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+									"        pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+									"    }",
+									"    if (jsonData.data && jsonData.data.user) {",
+									"        pm.collectionVariables.set('userId', jsonData.data.user.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"testuser@example.com\",\n    \"password\": \"SecurePass123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Login with email and password.\n\n**Rate Limit:** 5 failed attempts/15 minutes\n\n**Response:** Returns access token, refresh token, and user data"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "me"]
+						},
+						"description": "Get currently authenticated user info."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.tokens) {",
+									"        pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+									"        pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/refresh",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "refresh"]
+						},
+						"description": "Get new access token using refresh token."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    pm.collectionVariables.set('accessToken', '');",
+									"    pm.collectionVariables.set('refreshToken', '');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/logout",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "logout"]
+						},
+						"description": "Logout and invalidate refresh token."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout All Devices",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    pm.collectionVariables.set('accessToken', '');",
+									"    pm.collectionVariables.set('refreshToken', '');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/logout-all",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "logout-all"]
+						},
+						"description": "Logout from all devices and invalidate all refresh tokens."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Email",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/verify-email/:token",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "verify-email", ":token"],
+							"variable": [
+								{
+									"key": "token",
+									"value": "your-verification-token",
+									"description": "Email verification token (32-64 characters)"
+								}
+							]
+						},
+						"description": "Verify email address using the token sent via email."
+					},
+					"response": []
+				},
+				{
+					"name": "Resend Verification Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"testuser@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/resend-verification",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "resend-verification"]
+						},
+						"description": "Resend email verification link.\n\n**Rate Limit:** 5 requests/15 minutes"
+					},
+					"response": []
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"testuser@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/forgot-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "forgot-password"]
+						},
+						"description": "Request password reset email.\n\n**Rate Limit:** 3 requests/hour\n\n**Note:** Returns success regardless of whether email exists (for security)"
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"NewSecurePass123\",\n    \"confirmPassword\": \"NewSecurePass123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/reset-password/:token",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "reset-password", ":token"],
+							"variable": [
+								{
+									"key": "token",
+									"value": "your-reset-token",
+									"description": "Password reset token (32-64 characters)"
+								}
+							]
+						},
+						"description": "Reset password using token from email.\n\n**Rate Limit:** 3 requests/hour"
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"currentPassword\": \"SecurePass123\",\n    \"newPassword\": \"NewSecurePass456\",\n    \"confirmNewPassword\": \"NewSecurePass456\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/change-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "change-password"]
+						},
+						"description": "Change password for authenticated user.\n\n**Validation:** New password must differ from current password"
+					},
+					"response": []
+				}
+			],
+			"description": "User authentication endpoints including registration, login, logout, and password management."
+		},
+		{
+			"name": "User Profile",
+			"item": [
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "profile"]
+						},
+						"description": "Get current user's profile information."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Jane Smith\",\n    \"dateOfBirth\": \"1995-05-15\",\n    \"timezone\": \"Africa/Nairobi\",\n    \"language\": \"en\",\n    \"avatarUrl\": \"https://example.com/avatar.jpg\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "profile"]
+						},
+						"description": "Update current user's profile.\n\n**Languages:** en, sw, fr, es, pt"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Health Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/health-profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "health-profile"]
+						},
+						"description": "Get user's health profile (encrypted data).\n\n**Rate Limit:** 30 requests/minute"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Health Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"averageCycleLength\": 28,\n    \"averagePeriodLength\": 5,\n    \"birthControlMethod\": \"none\",\n    \"healthConditions\": [\"pcos\"],\n    \"medications\": [],\n    \"lastPeriodDate\": \"2024-01-10\",\n    \"isPregnant\": false,\n    \"isTryingToConceive\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/health-profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "health-profile"]
+						},
+						"description": "Update user's health profile.\n\n**Validation:**\n- Cycle length: 21-45 days\n- Period length: 1-10 days\n- Last period date: ISO 8601, not in future\n\n**Rate Limit:** 30 requests/minute"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Preferences",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/preferences",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "preferences"]
+						},
+						"description": "Get user's notification preferences and settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Preferences",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"notifications\": {\n        \"periodReminder\": true,\n        \"ovulationReminder\": true,\n        \"pillReminder\": false,\n        \"dailyLogReminder\": true,\n        \"communityUpdates\": false\n    },\n    \"reminderTime\": \"20:00\",\n    \"privacy\": \"private\",\n    \"theme\": \"light\",\n    \"units\": \"metric\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/preferences",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "preferences"]
+						},
+						"description": "Update user preferences.\n\n**Privacy Levels:** private, friends, public"
+					},
+					"response": []
+				},
+				{
+					"name": "Export User Data (GDPR)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/export",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "export"]
+						},
+						"description": "Export all user data in GDPR-compliant format."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"SecurePass123\",\n    \"confirmation\": \"DELETE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/account",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "account"]
+						},
+						"description": "Permanently delete user account.\n\n**WARNING:** This action is irreversible!\n\n**Requires:**\n- Password verification\n- Confirmation string: \"DELETE\""
+					},
+					"response": []
+				}
+			],
+			"description": "User profile management endpoints"
+		},
+		{
+			"name": "Admin - Users",
+			"item": [
+				{
+					"name": "Search Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users?q=jane&page=1&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["users"],
+							"query": [
+								{
+									"key": "q",
+									"value": "jane",
+									"description": "Search query"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Results per page"
+								}
+							]
+						},
+						"description": "Search users (Admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/:userId",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", ":userId"],
+							"variable": [
+								{
+									"key": "userId",
+									"value": "{{userId}}",
+									"description": "User UUID"
+								}
+							]
+						},
+						"description": "Get user by ID (Admin only)."
+					},
+					"response": []
+				}
+			],
+			"description": "Admin-only user management endpoints"
+		},
+		{
+			"name": "Cycle Tracking",
+			"item": [
+				{
+					"name": "Start Period",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.collectionVariables.set('cycleId', jsonData.data.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-15\",\n    \"flowIntensity\": \"medium\",\n    \"notes\": \"Started this morning\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/cycles/start",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "start"]
+						},
+						"description": "Start tracking a new period.\n\n**Flow Intensity:** spotting, light, medium, heavy\n\n**Rate Limit:** 30 requests/minute"
+					},
+					"response": []
+				},
+				{
+					"name": "End Period",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-20\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/cycles/end",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "end"]
+						},
+						"description": "Mark current period as ended."
+					},
+					"response": []
+				},
+				{
+					"name": "Log Daily Entry",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-16\",\n    \"flowIntensity\": \"heavy\",\n    \"temperature\": 36.5,\n    \"cervicalMucus\": \"creamy\",\n    \"sexualActivity\": false,\n    \"contraceptionUsed\": false,\n    \"notes\": \"Cramps in the morning\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/cycles/log",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "log"]
+						},
+						"description": "Log daily cycle entry.\n\n**Temperature:** 35.0-42.0°C\n\n**Cervical Mucus:** dry, sticky, creamy, watery, egg_white"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Cycle",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/current",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "current"]
+						},
+						"description": "Get current cycle status with phase and predictions.\n\n**Phases:** menstrual, follicular, ovulation, luteal"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cycle Predictions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/predictions",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "predictions"]
+						},
+						"description": "Get next period and ovulation predictions."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cycle Analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/analytics?startDate=2024-01-01&endDate=2024-06-30",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "analytics"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2024-01-01",
+									"description": "Start date (ISO 8601)"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-06-30",
+									"description": "End date (ISO 8601)"
+								}
+							]
+						},
+						"description": "Get cycle statistics and analytics."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cycle History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles?page=1&limit=20&startDate=2024-01-01&endDate=2024-12-31",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-12-31"
+								}
+							]
+						},
+						"description": "Get paginated cycle history."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Daily Log",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/log/:date",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", "log", ":date"],
+							"variable": [
+								{
+									"key": "date",
+									"value": "2024-01-16",
+									"description": "Date (ISO 8601)"
+								}
+							]
+						},
+						"description": "Get daily log entry for a specific date."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cycle by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/:cycleId",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", ":cycleId"],
+							"variable": [
+								{
+									"key": "cycleId",
+									"value": "{{cycleId}}",
+									"description": "Cycle UUID"
+								}
+							]
+						},
+						"description": "Get complete cycle details with daily logs."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cycle",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"notes\": \"Updated cycle notes\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/cycles/:cycleId",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", ":cycleId"],
+							"variable": [
+								{
+									"key": "cycleId",
+									"value": "{{cycleId}}",
+									"description": "Cycle UUID"
+								}
+							]
+						},
+						"description": "Update cycle information."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Cycle",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/cycles/:cycleId",
+							"host": ["{{baseUrl}}"],
+							"path": ["cycles", ":cycleId"],
+							"variable": [
+								{
+									"key": "cycleId",
+									"value": "{{cycleId}}",
+									"description": "Cycle UUID"
+								}
+							]
+						},
+						"description": "Delete a cycle record."
+					},
+					"response": []
+				}
+			],
+			"description": "Period and cycle tracking endpoints"
+		},
+		{
+			"name": "Health - Symptoms",
+			"item": [
+				{
+					"name": "Log Symptom",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.collectionVariables.set('symptomId', jsonData.data.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-15\",\n    \"symptom\": \"cramps\",\n    \"category\": \"pain\",\n    \"severity\": 2,\n    \"timeOfDay\": \"morning\",\n    \"notes\": \"Took ibuprofen\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms"]
+						},
+						"description": "Log a symptom.\n\n**Categories:** physical, emotional, pain, digestive, skin, sleep\n\n**Severity:** 1 (mild), 2 (moderate), 3 (severe)\n\n**Time of Day:** morning, afternoon, evening, night, all_day"
+					},
+					"response": []
+				},
+				{
+					"name": "Log Multiple Symptoms",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-15\",\n    \"symptoms\": [\n        {\n            \"symptom\": \"cramps\",\n            \"category\": \"pain\",\n            \"severity\": 2\n        },\n        {\n            \"symptom\": \"bloating\",\n            \"category\": \"physical\",\n            \"severity\": 1\n        },\n        {\n            \"symptom\": \"headache\",\n            \"category\": \"pain\",\n            \"severity\": 2\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms/batch",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms", "batch"]
+						},
+						"description": "Log multiple symptoms at once (1-20 entries)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Symptoms",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms?page=1&limit=20&startDate=2024-01-01&category=pain&symptom=cramps",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "category",
+									"value": "pain",
+									"description": "Filter by category"
+								},
+								{
+									"key": "symptom",
+									"value": "cramps",
+									"description": "Filter by symptom name"
+								}
+							]
+						},
+						"description": "Get paginated symptoms list with optional filters."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Symptoms by Date",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms/date/:date",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms", "date", ":date"],
+							"variable": [
+								{
+									"key": "date",
+									"value": "2024-01-15",
+									"description": "Date (ISO 8601)"
+								}
+							]
+						},
+						"description": "Get all symptoms for a specific date."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Symptom",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"severity\": 3,\n    \"notes\": \"Getting worse\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{symptomId}}",
+									"description": "Symptom record ID"
+								}
+							]
+						},
+						"description": "Update a symptom record."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Symptom",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/symptoms/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "symptoms", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{symptomId}}",
+									"description": "Symptom record ID"
+								}
+							]
+						},
+						"description": "Delete a symptom record."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Symptom Analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/analytics/symptoms?startDate=2024-01-01&endDate=2024-03-31",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "analytics", "symptoms"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-03-31"
+								}
+							]
+						},
+						"description": "Get symptom statistics and analytics."
+					},
+					"response": []
+				}
+			],
+			"description": "Symptom tracking and analytics"
+		},
+		{
+			"name": "Health - Moods",
+			"item": [
+				{
+					"name": "Log Mood",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.collectionVariables.set('moodId', jsonData.data.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-15\",\n    \"mood\": \"happy\",\n    \"intensity\": 4,\n    \"notes\": \"Great day!\",\n    \"triggers\": [\"good sleep\", \"exercise\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/moods",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods"]
+						},
+						"description": "Log a mood entry.\n\n**Moods:** happy, sad, irritable, anxious, energetic, tired, calm, stressed, emotional, confident\n\n**Intensity:** 1-5"
+					},
+					"response": []
+				},
+				{
+					"name": "Log Multiple Moods",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"date\": \"2024-01-15\",\n    \"moods\": [\n        {\n            \"mood\": \"energetic\",\n            \"intensity\": 4\n        },\n        {\n            \"mood\": \"happy\",\n            \"intensity\": 3\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/moods/batch",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods", "batch"]
+						},
+						"description": "Log multiple moods at once."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Moods",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/moods?page=1&limit=20&startDate=2024-01-01&mood=happy",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "mood",
+									"value": "happy",
+									"description": "Filter by mood type"
+								}
+							]
+						},
+						"description": "Get paginated moods list."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Moods by Date",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/moods/date/:date",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods", "date", ":date"],
+							"variable": [
+								{
+									"key": "date",
+									"value": "2024-01-15",
+									"description": "Date (ISO 8601)"
+								}
+							]
+						},
+						"description": "Get all moods for a specific date."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Mood",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"intensity\": 5,\n    \"notes\": \"Even better now!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/health/moods/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{moodId}}",
+									"description": "Mood record ID"
+								}
+							]
+						},
+						"description": "Update a mood record."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Mood",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/moods/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "moods", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{moodId}}",
+									"description": "Mood record ID"
+								}
+							]
+						},
+						"description": "Delete a mood record."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Mood Analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/analytics/moods?startDate=2024-01-01&endDate=2024-03-31",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "analytics", "moods"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-03-31"
+								}
+							]
+						},
+						"description": "Get mood statistics and trends."
+					},
+					"response": []
+				}
+			],
+			"description": "Mood tracking and analytics"
+		},
+		{
+			"name": "Health - Summary & Trends",
+			"item": [
+				{
+					"name": "Get Daily Health Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/summary/:date",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "summary", ":date"],
+							"variable": [
+								{
+									"key": "date",
+									"value": "2024-01-15",
+									"description": "Date (ISO 8601)"
+								}
+							]
+						},
+						"description": "Get combined symptoms and moods for a specific date."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Health Trends for Cycle",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/health/trends/:cycleId",
+							"host": ["{{baseUrl}}"],
+							"path": ["health", "trends", ":cycleId"],
+							"variable": [
+								{
+									"key": "cycleId",
+									"value": "{{cycleId}}",
+									"description": "Cycle UUID"
+								}
+							]
+						},
+						"description": "Get health data correlated with a specific menstrual cycle."
+					},
+					"response": []
+				}
+			],
+			"description": "Health summaries and cycle correlation"
+		}
+	]
+}
