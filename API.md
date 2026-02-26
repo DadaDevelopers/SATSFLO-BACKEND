@@ -12,10 +12,15 @@ Complete API reference for the Satsflow mobile application backend.
 
 1. [Authentication](#authentication)
 2. [User Management](#user-management)
-3. [Cycle Tracking](#cycle-tracking)
-4. [Health (Symptoms & Moods)](#health-symptoms--moods)
-5. [Constants & Enums](#constants--enums)
-6. [Error Codes](#error-codes)
+3. [Cycle Profile](#cycle-profile)
+4. [Cycle Tracking](#cycle-tracking)
+5. [Day Logs](#day-logs)
+6. [Health (Symptoms & Moods)](#health-symptoms--moods)
+7. [Journal](#journal)
+8. [Water Settings](#water-settings)
+9. [Community](#community)
+10. [Constants & Enums](#constants--enums)
+11. [Error Codes](#error-codes)
 
 ---
 
@@ -422,6 +427,84 @@ DELETE /users/account
 
 ---
 
+## Cycle Profile
+
+Lightweight cycle setup used to drive home-screen predictions. This is separate from the full Cycle Tracking module.
+
+### Create / Update Cycle Profile
+
+Create or replace the authenticated user's cycle profile.
+
+```http
+POST /cycle-profile
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "cycle_length": 28,
+  "period_length": 5,
+  "last_period_start": "2024-01-15"
+}
+```
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `last_period_start` | string (YYYY-MM-DD) | Yes | — |
+| `cycle_length` | integer | No | 21–35 (default: 28) |
+| `period_length` | integer | No | 3–9 (default: 5) |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Cycle profile saved",
+  "data": {
+    "user_id": "uuid",
+    "cycle_length": 28,
+    "period_length": 5,
+    "last_period_start": "2024-01-15"
+  }
+}
+```
+
+---
+
+### Get Cycle Profile
+
+Retrieve the cycle profile with live calculations (current day, phase, days until next period).
+
+```http
+GET /cycle-profile
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Cycle profile retrieved",
+  "data": {
+    "user_id": "uuid",
+    "cycle_length": 28,
+    "period_length": 5,
+    "last_period_start": "2024-01-15",
+    "current_day": 12,
+    "days_until_period": 17,
+    "current_phase": "follicular"
+  }
+}
+```
+
+**Phases:** `menstrual`, `follicular`, `ovulation`, `luteal`
+
+**Response (404):** Returned when no profile has been created yet.
+
+---
+
 ## Cycle Tracking
 
 ### Start Period
@@ -634,6 +717,122 @@ DELETE /cycles/:cycleId
 
 ---
 
+## Day Logs
+
+A flexible daily log that consolidates period, symptoms, moods, vitals, and notes in one entry per day.
+
+All endpoints require authentication.
+
+### Get Day Log
+
+```http
+GET /logs?date=YYYY-MM-DD
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Query Parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `date` | Yes | Date in `YYYY-MM-DD` format |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Day log retrieved",
+  "data": {
+    "user_id": "uuid",
+    "date": "2024-01-15",
+    "period_start": true,
+    "period_end": false,
+    "flow_level": "medium",
+    "symptoms": ["cramps", "bloating"],
+    "moods": ["tired"],
+    "medicine": ["ibuprofen"],
+    "note": "Felt tired all day",
+    "weight": 62.5,
+    "temperature": 36.7,
+    "water_intake": 1800
+  }
+}
+```
+
+Returns `null` data when no log exists for the requested date.
+
+---
+
+### Upsert Day Log
+
+Create or update the log for a specific date. Only include the fields you want to set — omitted fields are left unchanged.
+
+```http
+PUT /logs/:date
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**URL Parameter:** `:date` — date in `YYYY-MM-DD` format
+
+**Request Body (all fields optional):**
+```json
+{
+  "period_start": true,
+  "period_end": false,
+  "flow_level": "medium",
+  "symptoms": ["cramps", "bloating"],
+  "moods": ["tired", "emotional"],
+  "medicine": ["ibuprofen"],
+  "note": "Felt tired all day",
+  "weight": 62.5,
+  "temperature": 36.7,
+  "water_intake": 1800
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Day log saved",
+  "data": { ... }
+}
+```
+
+---
+
+### Get Day Logs Range
+
+Retrieve all logs for an inclusive date range.
+
+```http
+GET /logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Query Parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `from` | Yes | Start date (`YYYY-MM-DD`), must not be after `to` |
+| `to` | Yes | End date (`YYYY-MM-DD`) |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Logs range retrieved",
+  "data": [
+    { "date": "2024-01-15", "flow_level": "medium", ... },
+    { "date": "2024-01-16", "flow_level": "heavy",  ... }
+  ]
+}
+```
+
+---
+
 ## Health (Symptoms & Moods)
 
 ### Log Symptom
@@ -817,6 +1016,381 @@ Health data correlated with a specific cycle.
 
 ```http
 GET /health/trends/:cycleId
+```
+
+---
+
+## Journal
+
+Personal diary entries grouped by month.
+
+All endpoints require authentication.
+
+### Get Journal Entries
+
+Retrieve all entries for a given calendar month.
+
+```http
+GET /journal?month=YYYY-MM
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Query Parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `month` | Yes | Month in `YYYY-MM` format |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Journal entries retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "entry_date": "2024-01-15",
+      "content": "Feeling much better today.",
+      "created_at": "2024-01-15T20:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### Create Journal Entry
+
+```http
+POST /journal
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "entry_date": "2024-01-15",
+  "content": "Feeling much better today."
+}
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `entry_date` | string (YYYY-MM-DD) | Yes |
+| `content` | string (non-empty) | Yes |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Journal entry created",
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "entry_date": "2024-01-15",
+    "content": "Feeling much better today.",
+    "created_at": "2024-01-15T20:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Water Settings
+
+Per-user water intake goal and cup configuration.
+
+All endpoints require authentication.
+
+### Get Water Settings
+
+Returns the user's saved settings, or sensible defaults if none have been set.
+
+```http
+GET /water-settings
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Water settings retrieved",
+  "data": {
+    "user_id": "uuid",
+    "water_target": 2000,
+    "cup_capacity": 250,
+    "cup_style": "standard"
+  }
+}
+```
+
+**Defaults:** `water_target` = 2000 ml, `cup_capacity` = 250 ml, `cup_style` = `"standard"`
+
+---
+
+### Update Water Settings
+
+Provide at least one field to update.
+
+```http
+PUT /water-settings
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body (all fields optional):**
+```json
+{
+  "water_target": 2500,
+  "cup_capacity": 300,
+  "cup_style": "large"
+}
+```
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `water_target` | integer | Positive integer (ml) |
+| `cup_capacity` | integer | Positive integer (ml) |
+| `cup_style` | string | Free-form label |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Water settings updated",
+  "data": {
+    "user_id": "uuid",
+    "water_target": 2500,
+    "cup_capacity": 300,
+    "cup_style": "large"
+  }
+}
+```
+
+---
+
+## Community
+
+Public forum threads, comments, likes, and notifications.
+
+### Get Threads
+
+Publicly readable. Authenticated users receive a personalised `is_liked_by_me` flag.
+
+```http
+GET /threads?tab=recent&search=cramps&page=1&limit=20
+```
+
+**Auth:** Optional (`Authorization: Bearer <token>`)
+
+**Query Parameters:**
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `tab` | `recent` | Feed filter: `recent` or `popular` |
+| `search` | — | Full-text search string |
+| `page` | `1` | Page number |
+| `limit` | `20` | Results per page (max 50) |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "content": "Anyone else dealing with PCOS?",
+      "image_url": null,
+      "like_count": 12,
+      "comment_count": 4,
+      "is_liked_by_me": false,
+      "created_at": "2024-01-15T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 42,
+    "totalPages": 3,
+    "hasNext": true,
+    "hasPrev": false
+  }
+}
+```
+
+---
+
+### Create Thread
+
+```http
+POST /threads
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "content": "Anyone else dealing with PCOS?",
+  "image_url": "https://example.com/image.jpg"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `content` | Yes | Non-empty string |
+| `image_url` | No | Optional image URL |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Thread created",
+  "data": { "id": "uuid", "content": "...", ... }
+}
+```
+
+---
+
+### Get Comments
+
+```http
+GET /threads/:id/comments
+```
+
+**Auth:** Optional
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Comments retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "thread_id": "uuid",
+      "user_id": "uuid",
+      "content": "Me too!",
+      "created_at": "2024-01-15T11:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### Add Comment
+
+```http
+POST /threads/:id/comments
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "content": "Me too!"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Comment added",
+  "data": { "id": "uuid", "content": "Me too!", ... }
+}
+```
+
+---
+
+### Like Thread
+
+```http
+POST /threads/:id/like
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Thread liked",
+  "data": { "like_count": 13, "is_liked_by_me": true }
+}
+```
+
+---
+
+### Unlike Thread
+
+```http
+DELETE /threads/:id/like
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Like removed",
+  "data": { "like_count": 12, "is_liked_by_me": false }
+}
+```
+
+---
+
+### Get Notifications
+
+```http
+GET /notifications
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "type": "comment",
+      "thread_id": "uuid",
+      "read": false,
+      "created_at": "2024-01-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### Mark All Notifications Read
+
+```http
+PATCH /notifications/read-all
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read",
+  "data": null
+}
 ```
 
 ---
