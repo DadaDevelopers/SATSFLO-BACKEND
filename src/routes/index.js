@@ -11,6 +11,7 @@ const authRoutes = require('./auth.routes');
 const userRoutes = require('./user.routes');
 const cycleRoutes = require('./cycle.routes');
 const healthRoutes = require('./health.routes');
+const walletRoutes = require('./wallet.routes');
 const ApiResponse = require('../utils/response');
 
 /**
@@ -40,7 +41,8 @@ router.get('/', (req, res) => {
       auth: '/api/v1/auth',
       users: '/api/v1/users',
       cycles: '/api/v1/cycles',
-      health: '/api/v1/health'
+      health: '/api/v1/health',
+      wallets: '/api/v1/wallets'
     }
   });
 });
@@ -50,5 +52,6 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/cycles', cycleRoutes);
 router.use('/health', healthRoutes);
+router.use('/wallets', walletRoutes);
 
 module.exports = router;
