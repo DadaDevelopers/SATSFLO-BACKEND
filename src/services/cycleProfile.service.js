@@ -1,6 +1,6 @@
 'use strict';
 
-const { supabaseAdmin } = require('../config/supabase');
+const { pool } = require('../config/database');
 
 const TABLE = 'cycle_profiles';
 
@@ -18,11 +18,9 @@ class CycleProfileService {
     const msPerDay = 86_400_000;
     const daysSince = Math.floor((today - lastPeriod) / msPerDay);
 
-    // current_day is 1-indexed (day 1 = start of period)
     const currentDay = (daysSince % profile.cycle_length) + 1;
     const daysUntilPeriod = profile.cycle_length - currentDay + 1;
 
-    // Ovulation typically 14 days before next period
     const ovulationDay = profile.cycle_length - 14;
 
     let phase;
@@ -43,30 +41,30 @@ class CycleProfileService {
    * Create or replace a cycle profile for the authenticated user.
    */
   async upsert(userId, { cycle_length, period_length, last_period_start }) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .upsert(
-        { user_id: userId, cycle_length, period_length, last_period_start },
-        { onConflict: 'user_id', returning: 'representation' }
-      )
-      .select()
-      .single();
+    const result = await pool.query(
+      `INSERT INTO ${TABLE} (user_id, cycle_length, period_length, last_period_start)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id) DO UPDATE SET
+         cycle_length       = EXCLUDED.cycle_length,
+         period_length      = EXCLUDED.period_length,
+         last_period_start  = EXCLUDED.last_period_start
+       RETURNING *`,
+      [userId, cycle_length, period_length, last_period_start]
+    );
 
-    if (error) throw error;
-    return data;
+    return result.rows[0];
   }
 
   /**
    * Retrieve cycle profile with live calculations.
    */
   async getWithCalculations(userId) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const result = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE user_id = $1`,
+      [userId]
+    );
+    const data = result.rows[0];
 
-    if (error) throw error;
     if (!data) return null;
 
     const { currentDay, daysUntilPeriod, phase } = CycleProfileService._calculate(data);
@@ -75,7 +73,7 @@ class CycleProfileService {
       ...data,
       current_day: currentDay,
       days_until_period: daysUntilPeriod,
-      current_phase: phase,
+      current_phase: phase
     };
   }
 }

@@ -1,13 +1,12 @@
 /**
  * Database Configuration
  *
- * Centralizes table names and error codes for Supabase
+ * Exports the pg pool and centralized table names
  */
 
-const { supabase, supabaseAdmin } = require('./supabase');
+const pool = require('./db');
 
 const dbConfig = {
-  // Table names - centralized for easy refactoring
   tables: {
     USERS: 'users',
     HEALTH_PROFILES: 'health_profiles',
@@ -26,7 +25,6 @@ const dbConfig = {
     FORUM_POSTS: 'forum_posts'
   },
 
-  // PostgreSQL error codes
   errors: {
     DUPLICATE_KEY: '23505',
     FOREIGN_KEY_VIOLATION: '23503',
@@ -36,8 +34,4 @@ const dbConfig = {
   }
 };
 
-module.exports = {
-  supabase,
-  supabaseAdmin,
-  dbConfig
-};
+module.exports = { pool, dbConfig };

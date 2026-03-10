@@ -1,6 +1,6 @@
 'use strict';
 
-const { supabaseAdmin } = require('../config/supabase');
+const { pool } = require('../config/database');
 
 const TABLE = 'day_logs';
 
@@ -9,51 +9,48 @@ class DayLogsService {
    * Get a single day log. Returns null if not found.
    */
   async getByDate(userId, date) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .select('*')
-      .eq('user_id', userId)
-      .eq('log_date', date)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data;
+    const result = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE user_id = $1 AND log_date = $2`,
+      [userId, date]
+    );
+    return result.rows[0] || null;
   }
 
   /**
    * Upsert a day log (create or update).
    */
   async upsert(userId, date, fields) {
-    const payload = {
-      user_id: userId,
-      log_date: date,
-      ...fields,
-    };
+    const allFields = { user_id: userId, log_date: date, ...fields };
+    const keys = Object.keys(allFields);
+    const values = Object.values(allFields);
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const cols = keys.join(', ');
+    const updates = keys
+      .filter(k => k !== 'user_id' && k !== 'log_date')
+      .map(k => `${k} = EXCLUDED.${k}`)
+      .join(', ');
 
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .upsert(payload, { onConflict: 'user_id,log_date', returning: 'representation' })
-      .select()
-      .single();
+    const result = await pool.query(
+      `INSERT INTO ${TABLE} (${cols}) VALUES (${placeholders})
+       ON CONFLICT (user_id, log_date) DO UPDATE SET ${updates}
+       RETURNING *`,
+      values
+    );
 
-    if (error) throw error;
-    return data;
+    return result.rows[0];
   }
 
   /**
    * Get all logs in a date range (inclusive).
    */
   async getRange(userId, from, to) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .select('*')
-      .eq('user_id', userId)
-      .gte('log_date', from)
-      .lte('log_date', to)
-      .order('log_date', { ascending: true });
-
-    if (error) throw error;
-    return data;
+    const result = await pool.query(
+      `SELECT * FROM ${TABLE}
+       WHERE user_id = $1 AND log_date >= $2 AND log_date <= $3
+       ORDER BY log_date ASC`,
+      [userId, from, to]
+    );
+    return result.rows;
   }
 }
 
