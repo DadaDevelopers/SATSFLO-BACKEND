@@ -1,15 +1,18 @@
 /**
  * Authentication Service
  *
- * Handles user registration, login, tokens, and password management
+ * Register → bcrypt hash → store in users
+ * Login → bcrypt compare → issue JWT access + refresh token
+ * Protected routes → verify JWT
+ * Refresh → swap refresh token for new access token
+ * Logout → revoke refresh token in DB
  */
 
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
 
-const { supabaseAdmin, dbConfig } = require('../config/database');
+const { pool } = require('../config/database');
 const jwtConfig = require('../config/jwt');
 const emailService = require('./email.service');
 const logger = require('../utils/logger');
@@ -22,64 +25,46 @@ class AuthService {
    */
   async register({ email, password, name, dateOfBirth }) {
     // Check if user exists
-    const { data: existingUser } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id')
-      .eq('email', email.toLowerCase())
-      .single();
-
-    if (existingUser) {
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    if (existing.rows[0]) {
       const error = new Error('Email already registered');
       error.statusCode = 409;
       throw error;
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-    // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // Create user
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .insert({
-        email: email.toLowerCase(),
-        password_hash: passwordHash,
-        name,
-        date_of_birth: dateOfBirth,
-        verification_token: verificationToken,
-        verification_expires: verificationExpires.toISOString(),
-        role: 'user',
-        status: 'active',
-        created_at: new Date().toISOString()
-      })
-      .select('id, email, name, role, created_at')
-      .single();
+    const result = await pool.query(
+      `INSERT INTO users
+         (email, password_hash, name, date_of_birth, verification_token,
+          verification_expires, role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'user', 'active', NOW())
+       RETURNING id, email, name, role, created_at`,
+      [email.toLowerCase(), passwordHash, name, dateOfBirth,
+       verificationToken, verificationExpires]
+    );
+    const user = result.rows[0];
 
-    if (error) {
-      logger.error('User creation failed', error);
-      throw error;
+    if (!user) {
+      throw new Error('User creation failed');
     }
 
     // Create default health profile
-    await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .insert({
-        user_id: user.id,
-        average_cycle_length: 28,
-        average_period_length: 5,
-        created_at: new Date().toISOString()
-      });
+    await pool.query(
+      `INSERT INTO health_profiles (user_id, average_cycle_length, average_period_length, created_at)
+       VALUES ($1, 28, 5, NOW())
+       ON CONFLICT (user_id) DO NOTHING`,
+      [user.id]
+    );
 
-    // Send verification email
     await emailService.sendVerificationEmail(email, verificationToken, name);
 
-    // Generate tokens
     const tokens = this.generateTokens(user);
-
-    // Store refresh token
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
     logger.info('User registered', { userId: user.id, email });
@@ -100,20 +85,19 @@ class AuthService {
    * Login user
    */
   async login({ email, password }) {
-    // Find user
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, password_hash, role, status, email_verified')
-      .eq('email', email.toLowerCase())
-      .single();
+    const result = await pool.query(
+      `SELECT id, email, name, password_hash, role, status, email_verified
+       FROM users WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    const user = result.rows[0];
 
-    if (error || !user) {
+    if (!user) {
       const err = new Error('Invalid email or password');
       err.statusCode = 401;
       throw err;
     }
 
-    // Check account status
     if (user.status === 'suspended') {
       const err = new Error('Account suspended. Please contact support.');
       err.statusCode = 403;
@@ -126,7 +110,6 @@ class AuthService {
       throw err;
     }
 
-    // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       const err = new Error('Invalid email or password');
@@ -134,16 +117,9 @@ class AuthService {
       throw err;
     }
 
-    // Update last login
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', user.id);
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
-    // Generate tokens
     const tokens = this.generateTokens(user);
-
-    // Store refresh token
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
     logger.info('User logged in', { userId: user.id });
@@ -164,7 +140,6 @@ class AuthService {
    * Refresh access token
    */
   async refreshToken(refreshToken) {
-    // Verify refresh token
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, jwtConfig.refreshSecret);
@@ -174,14 +149,12 @@ class AuthService {
       throw error;
     }
 
-    // Check if token exists in database
-    const { data: storedToken } = await supabaseAdmin
-      .from(dbConfig.tables.REFRESH_TOKENS)
-      .select('*')
-      .eq('token', refreshToken)
-      .eq('user_id', decoded.userId)
-      .eq('revoked', false)
-      .single();
+    const tokenResult = await pool.query(
+      `SELECT * FROM refresh_tokens
+       WHERE token = $1 AND user_id = $2 AND revoked = false`,
+      [refreshToken, decoded.userId]
+    );
+    const storedToken = tokenResult.rows[0];
 
     if (!storedToken) {
       const error = new Error('Refresh token not found or revoked');
@@ -189,19 +162,17 @@ class AuthService {
       throw error;
     }
 
-    // Check expiration
     if (new Date(storedToken.expires_at) < new Date()) {
       const error = new Error('Refresh token expired');
       error.statusCode = 401;
       throw error;
     }
 
-    // Get user
-    const { data: user } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, role, status')
-      .eq('id', decoded.userId)
-      .single();
+    const userResult = await pool.query(
+      'SELECT id, email, name, role, status FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+    const user = userResult.rows[0];
 
     if (!user || user.status !== 'active') {
       const error = new Error('User not found or inactive');
@@ -209,16 +180,9 @@ class AuthService {
       throw error;
     }
 
-    // Revoke old refresh token
-    await supabaseAdmin
-      .from(dbConfig.tables.REFRESH_TOKENS)
-      .update({ revoked: true })
-      .eq('id', storedToken.id);
+    await pool.query('UPDATE refresh_tokens SET revoked = true WHERE id = $1', [storedToken.id]);
 
-    // Generate new tokens
     const tokens = this.generateTokens(user);
-
-    // Store new refresh token
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -228,12 +192,10 @@ class AuthService {
    * Logout user (revoke refresh token)
    */
   async logout(userId, refreshToken) {
-    await supabaseAdmin
-      .from(dbConfig.tables.REFRESH_TOKENS)
-      .update({ revoked: true })
-      .eq('user_id', userId)
-      .eq('token', refreshToken);
-
+    await pool.query(
+      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND token = $2',
+      [userId, refreshToken]
+    );
     logger.info('User logged out', { userId });
   }
 
@@ -241,11 +203,10 @@ class AuthService {
    * Logout from all devices
    */
   async logoutAll(userId) {
-    await supabaseAdmin
-      .from(dbConfig.tables.REFRESH_TOKENS)
-      .update({ revoked: true })
-      .eq('user_id', userId);
-
+    await pool.query(
+      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1',
+      [userId]
+    );
     logger.info('User logged out from all devices', { userId });
   }
 
@@ -253,13 +214,13 @@ class AuthService {
    * Verify email
    */
   async verifyEmail(token) {
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, verification_expires')
-      .eq('verification_token', token)
-      .single();
+    const result = await pool.query(
+      'SELECT id, email, name, verification_expires FROM users WHERE verification_token = $1',
+      [token]
+    );
+    const user = result.rows[0];
 
-    if (error || !user) {
+    if (!user) {
       const err = new Error('Invalid verification token');
       err.statusCode = 400;
       throw err;
@@ -271,21 +232,16 @@ class AuthService {
       throw err;
     }
 
-    // Update user
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({
-        email_verified: true,
-        verification_token: null,
-        verification_expires: null
-      })
-      .eq('id', user.id);
+    await pool.query(
+      `UPDATE users
+       SET email_verified = true, verification_token = NULL, verification_expires = NULL
+       WHERE id = $1`,
+      [user.id]
+    );
 
-    // Send welcome email
     await emailService.sendWelcomeEmail(user.email, user.name);
 
     logger.info('Email verified', { userId: user.id });
-
     return { message: 'Email verified successfully' };
   }
 
@@ -293,14 +249,13 @@ class AuthService {
    * Resend verification email
    */
   async resendVerification(email) {
-    const { data: user } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, email_verified')
-      .eq('email', email.toLowerCase())
-      .single();
+    const result = await pool.query(
+      'SELECT id, email, name, email_verified FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    const user = result.rows[0];
 
     if (!user) {
-      // Don't reveal if email exists
       return { message: 'If an account exists, a verification email has been sent' };
     }
 
@@ -310,17 +265,13 @@ class AuthService {
       throw error;
     }
 
-    // Generate new token
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({
-        verification_token: verificationToken,
-        verification_expires: verificationExpires.toISOString()
-      })
-      .eq('id', user.id);
+    await pool.query(
+      'UPDATE users SET verification_token = $1, verification_expires = $2 WHERE id = $3',
+      [verificationToken, verificationExpires, user.id]
+    );
 
     await emailService.sendVerificationEmail(user.email, verificationToken, user.name);
 
@@ -331,37 +282,28 @@ class AuthService {
    * Request password reset
    */
   async forgotPassword(email) {
-    const { data: user } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name')
-      .eq('email', email.toLowerCase())
-      .single();
+    const result = await pool.query(
+      'SELECT id, email, name FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    const user = result.rows[0];
 
-    // Always return same message to prevent email enumeration
     const response = { message: 'If an account exists, a password reset email has been sent' };
 
-    if (!user) {
-      return response;
-    }
+    if (!user) return response;
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    // Store reset token
-    await supabaseAdmin
-      .from(dbConfig.tables.PASSWORD_RESETS)
-      .insert({
-        user_id: user.id,
-        token: resetToken,
-        expires_at: resetExpires.toISOString(),
-        created_at: new Date().toISOString()
-      });
+    await pool.query(
+      `INSERT INTO password_resets (user_id, token, expires_at, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [user.id, resetToken, resetExpires]
+    );
 
     await emailService.sendPasswordResetEmail(user.email, resetToken, user.name);
 
     logger.info('Password reset requested', { userId: user.id });
-
     return response;
   }
 
@@ -369,11 +311,11 @@ class AuthService {
    * Reset password with token
    */
   async resetPassword(token, newPassword) {
-    const { data: resetRecord } = await supabaseAdmin
-      .from(dbConfig.tables.PASSWORD_RESETS)
-      .select('user_id, expires_at, used')
-      .eq('token', token)
-      .single();
+    const result = await pool.query(
+      'SELECT user_id, expires_at, used FROM password_resets WHERE token = $1',
+      [token]
+    );
+    const resetRecord = result.rows[0];
 
     if (!resetRecord) {
       const error = new Error('Invalid reset token');
@@ -393,26 +335,16 @@ class AuthService {
       throw error;
     }
 
-    // Hash new password
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
-    // Update password
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({ password_hash: passwordHash })
-      .eq('id', resetRecord.user_id);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2',
+      [passwordHash, resetRecord.user_id]);
 
-    // Mark token as used
-    await supabaseAdmin
-      .from(dbConfig.tables.PASSWORD_RESETS)
-      .update({ used: true })
-      .eq('token', token);
+    await pool.query('UPDATE password_resets SET used = true WHERE token = $1', [token]);
 
-    // Revoke all refresh tokens
     await this.logoutAll(resetRecord.user_id);
 
     logger.info('Password reset completed', { userId: resetRecord.user_id });
-
     return { message: 'Password reset successfully' };
   }
 
@@ -420,11 +352,11 @@ class AuthService {
    * Change password (authenticated user)
    */
   async changePassword(userId, currentPassword, newPassword) {
-    const { data: user } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
+    const result = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = result.rows[0];
 
     if (!user) {
       const error = new Error('User not found');
@@ -440,17 +372,11 @@ class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
 
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({ password_hash: passwordHash })
-      .eq('id', userId);
-
-    // Revoke all refresh tokens except current
     await this.logoutAll(userId);
 
     logger.info('Password changed', { userId });
-
     return { message: 'Password changed successfully' };
   }
 
@@ -475,11 +401,7 @@ class AuthService {
       { expiresIn: jwtConfig.refreshExpiresIn }
     );
 
-    return {
-      accessToken,
-      refreshToken,
-      expiresIn: jwtConfig.expiresIn
-    };
+    return { accessToken, refreshToken, expiresIn: jwtConfig.expiresIn };
   }
 
   /**
@@ -489,12 +411,11 @@ class AuthService {
     const decoded = jwt.decode(token);
     const expiresAt = new Date(decoded.exp * 1000);
 
-    await supabaseAdmin.from(dbConfig.tables.REFRESH_TOKENS).insert({
-      user_id: userId,
-      token,
-      expires_at: expiresAt.toISOString(),
-      created_at: new Date().toISOString()
-    });
+    await pool.query(
+      `INSERT INTO refresh_tokens (user_id, token, expires_at, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [userId, token, expiresAt]
+    );
   }
 }
 

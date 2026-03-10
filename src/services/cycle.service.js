@@ -4,7 +4,7 @@
  * Handles period tracking, cycle management, and predictions
  */
 
-const { supabaseAdmin, dbConfig } = require('../config/database');
+const { pool } = require('../config/database');
 const Encryption = require('../utils/encryption');
 const logger = require('../utils/logger');
 const { CYCLE_PHASES, CYCLE_DEFAULTS } = require('../utils/constants');
@@ -15,41 +15,34 @@ class CycleService {
    */
   async startPeriod(userId, { date, flowIntensity, notes }) {
     // Check for existing active cycle
-    const { data: activeCycle } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('id')
-      .eq('user_id', userId)
-      .is('end_date', null)
-      .order('start_date', { ascending: false })
-      .limit(1)
-      .single();
+    const activeResult = await pool.query(
+      `SELECT id FROM cycles
+       WHERE user_id = $1 AND end_date IS NULL
+       ORDER BY start_date DESC LIMIT 1`,
+      [userId]
+    );
+    const activeCycle = activeResult.rows[0];
 
-    // If active cycle exists, end it first
     if (activeCycle) {
       const previousDay = new Date(date);
       previousDay.setDate(previousDay.getDate() - 1);
 
-      await supabaseAdmin
-        .from(dbConfig.tables.CYCLES)
-        .update({ end_date: previousDay.toISOString().split('T')[0] })
-        .eq('id', activeCycle.id);
+      await pool.query(
+        'UPDATE cycles SET end_date = $1 WHERE id = $2',
+        [previousDay.toISOString().split('T')[0], activeCycle.id]
+      );
     }
 
-    // Create new cycle
-    const { data: cycle, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .insert({
-        user_id: userId,
-        start_date: date,
-        notes: notes ? Encryption.encrypt(notes) : null,
-        created_at: new Date().toISOString()
-      })
-      .select('*')
-      .single();
+    const result = await pool.query(
+      `INSERT INTO cycles (user_id, start_date, notes, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING *`,
+      [userId, date, notes ? Encryption.encrypt(notes) : null]
+    );
+    const cycle = result.rows[0];
 
-    if (error) {
-      logger.error('Failed to start period', error);
-      throw error;
+    if (!cycle) {
+      throw new Error('Failed to start period');
     }
 
     // Log first day entry
@@ -61,13 +54,12 @@ class CycleService {
     });
 
     // Update health profile with last period date
-    await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .update({ last_period_date: date })
-      .eq('user_id', userId);
+    await pool.query(
+      'UPDATE health_profiles SET last_period_date = $1 WHERE user_id = $2',
+      [date, userId]
+    );
 
     logger.info('Period started', { userId, cycleId: cycle.id });
-
     return this.formatCycle(cycle);
   }
 
@@ -75,57 +67,42 @@ class CycleService {
    * End current period
    */
   async endPeriod(userId, { date }) {
-    // Get current cycle
-    const { data: cycle, error: fetchError } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('*')
-      .eq('user_id', userId)
-      .is('end_date', null)
-      .order('start_date', { ascending: false })
-      .limit(1)
-      .single();
+    const result = await pool.query(
+      `SELECT * FROM cycles
+       WHERE user_id = $1 AND end_date IS NULL
+       ORDER BY start_date DESC LIMIT 1`,
+      [userId]
+    );
+    const cycle = result.rows[0];
 
-    if (fetchError || !cycle) {
+    if (!cycle) {
       const error = new Error('No active period found');
       error.statusCode = 404;
       throw error;
     }
 
-    // Validate end date is after start date
     if (new Date(date) < new Date(cycle.start_date)) {
       const error = new Error('End date cannot be before start date');
       error.statusCode = 400;
       throw error;
     }
 
-    // Calculate period length
     const startDate = new Date(cycle.start_date);
     const endDate = new Date(date);
     const periodLength = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Update cycle with period end date
-    const { data: updatedCycle, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .update({
-        period_end_date: date,
-        period_length: periodLength,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', cycle.id)
-      .select('*')
-      .single();
+    const updated = await pool.query(
+      `UPDATE cycles
+       SET period_end_date = $1, period_length = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [date, periodLength, cycle.id]
+    );
 
-    if (error) {
-      logger.error('Failed to end period', error);
-      throw error;
-    }
-
-    // Update average period length
     await this.updateAverages(userId);
 
     logger.info('Period ended', { userId, cycleId: cycle.id, periodLength });
-
-    return this.formatCycle(updatedCycle);
+    return this.formatCycle(updated.rows[0]);
   }
 
   /**
@@ -147,101 +124,77 @@ class CycleService {
     // Get cycle ID if not provided
     let targetCycleId = cycleId;
     if (!targetCycleId) {
-      const { data: cycle } = await supabaseAdmin
-        .from(dbConfig.tables.CYCLES)
-        .select('id')
-        .eq('user_id', userId)
-        .lte('start_date', date)
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .single();
-
-      targetCycleId = cycle?.id;
+      const cycleResult = await pool.query(
+        `SELECT id FROM cycles
+         WHERE user_id = $1 AND start_date <= $2
+         ORDER BY start_date DESC LIMIT 1`,
+        [userId, date]
+      );
+      targetCycleId = cycleResult.rows[0]?.id;
     }
 
     // Check if entry exists for this date
-    const { data: existingEntry } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLE_LOGS)
-      .select('id')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .single();
+    const existingResult = await pool.query(
+      'SELECT id FROM cycle_logs WHERE user_id = $1 AND date = $2',
+      [userId, date]
+    );
+    const existingEntry = existingResult.rows[0];
 
-    const entryData = {
-      user_id: userId,
-      cycle_id: targetCycleId,
-      date,
-      flow_intensity: flowIntensity,
-      temperature,
-      cervical_mucus: cervicalMucus,
-      sexual_activity: sexualActivity,
-      contraception_used: contraceptionUsed,
-      notes: notes ? Encryption.encrypt(notes) : null,
-      updated_at: new Date().toISOString()
-    };
+    const encryptedNotes = notes ? Encryption.encrypt(notes) : null;
 
     let result;
     if (existingEntry) {
-      // Update existing entry
-      const { data, error } = await supabaseAdmin
-        .from(dbConfig.tables.CYCLE_LOGS)
-        .update(entryData)
-        .eq('id', existingEntry.id)
-        .select('*')
-        .single();
-
-      if (error) throw error;
-      result = data;
+      result = await pool.query(
+        `UPDATE cycle_logs
+         SET cycle_id = $1, flow_intensity = $2, temperature = $3,
+             cervical_mucus = $4, sexual_activity = $5, contraception_used = $6,
+             notes = $7, updated_at = NOW()
+         WHERE id = $8
+         RETURNING *`,
+        [targetCycleId, flowIntensity, temperature, cervicalMucus,
+         sexualActivity, contraceptionUsed, encryptedNotes, existingEntry.id]
+      );
     } else {
-      // Create new entry
-      entryData.created_at = new Date().toISOString();
-      const { data, error } = await supabaseAdmin
-        .from(dbConfig.tables.CYCLE_LOGS)
-        .insert(entryData)
-        .select('*')
-        .single();
-
-      if (error) throw error;
-      result = data;
+      result = await pool.query(
+        `INSERT INTO cycle_logs
+           (user_id, cycle_id, date, flow_intensity, temperature,
+            cervical_mucus, sexual_activity, contraception_used, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         RETURNING *`,
+        [userId, targetCycleId, date, flowIntensity, temperature,
+         cervicalMucus, sexualActivity, contraceptionUsed, encryptedNotes]
+      );
     }
 
-    return this.formatCycleLog(result);
+    return this.formatCycleLog(result.rows[0]);
   }
 
   /**
    * Get current cycle status
    */
   async getCurrentCycle(userId) {
-    const { data: cycle, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('*')
-      .eq('user_id', userId)
-      .order('start_date', { ascending: false })
-      .limit(1)
-      .single();
+    const result = await pool.query(
+      'SELECT * FROM cycles WHERE user_id = $1 ORDER BY start_date DESC LIMIT 1',
+      [userId]
+    );
+    const cycle = result.rows[0];
 
-    if (error || !cycle) {
-      return null;
-    }
+    if (!cycle) return null;
 
     const today = new Date();
     const startDate = new Date(cycle.start_date);
     const dayOfCycle = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Get health profile for averages
-    const { data: healthProfile } = await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .select('average_cycle_length, average_period_length')
-      .eq('user_id', userId)
-      .single();
+    const hpResult = await pool.query(
+      'SELECT average_cycle_length, average_period_length FROM health_profiles WHERE user_id = $1',
+      [userId]
+    );
+    const healthProfile = hpResult.rows[0];
 
     const avgCycleLength = healthProfile?.average_cycle_length || CYCLE_DEFAULTS.AVERAGE_CYCLE_LENGTH;
     const avgPeriodLength = healthProfile?.average_period_length || CYCLE_DEFAULTS.AVERAGE_PERIOD_LENGTH;
 
-    // Calculate phase
     const phase = this.calculatePhase(dayOfCycle, avgCycleLength, avgPeriodLength);
-
-    // Calculate predictions
     const predictions = this.calculatePredictions(cycle, avgCycleLength, avgPeriodLength);
 
     return {
@@ -257,31 +210,39 @@ class CycleService {
    */
   async getCycles(userId, { page = 1, limit = 20, startDate, endDate }) {
     const offset = (page - 1) * limit;
-
-    let query = supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId);
+    const conditions = ['user_id = $1'];
+    const values = [userId];
 
     if (startDate) {
-      query = query.gte('start_date', startDate);
+      values.push(startDate);
+      conditions.push(`start_date >= $${values.length}`);
     }
     if (endDate) {
-      query = query.lte('start_date', endDate);
+      values.push(endDate);
+      conditions.push(`start_date <= $${values.length}`);
     }
 
-    const { data: cycles, count, error } = await query
-      .order('start_date', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    if (error) throw error;
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM cycles ${whereClause}`,
+      values
+    );
+
+    const dataValues = [...values, limit, offset];
+    const result = await pool.query(
+      `SELECT * FROM cycles ${whereClause}
+       ORDER BY start_date DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      dataValues
+    );
 
     return {
-      cycles: cycles.map(c => this.formatCycle(c)),
+      cycles: result.rows.map(c => this.formatCycle(c)),
       pagination: {
         page,
         limit,
-        total: count
+        total: parseInt(countResult.rows[0].count)
       }
     };
   }
@@ -290,29 +251,26 @@ class CycleService {
    * Get cycle by ID
    */
   async getCycleById(userId, cycleId) {
-    const { data: cycle, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('*')
-      .eq('id', cycleId)
-      .eq('user_id', userId)
-      .single();
+    const result = await pool.query(
+      'SELECT * FROM cycles WHERE id = $1 AND user_id = $2',
+      [cycleId, userId]
+    );
+    const cycle = result.rows[0];
 
-    if (error || !cycle) {
+    if (!cycle) {
       const err = new Error('Cycle not found');
       err.statusCode = 404;
       throw err;
     }
 
-    // Get daily logs for this cycle
-    const { data: logs } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLE_LOGS)
-      .select('*')
-      .eq('cycle_id', cycleId)
-      .order('date', { ascending: true });
+    const logsResult = await pool.query(
+      'SELECT * FROM cycle_logs WHERE cycle_id = $1 ORDER BY date ASC',
+      [cycleId]
+    );
 
     return {
       ...this.formatCycle(cycle),
-      logs: (logs || []).map(l => this.formatCycleLog(l))
+      logs: logsResult.rows.map(l => this.formatCycleLog(l))
     };
   }
 
@@ -321,62 +279,50 @@ class CycleService {
    */
   async updateCycle(userId, cycleId, updates) {
     const allowedFields = ['start_date', 'end_date', 'period_end_date', 'notes'];
-    const sanitizedUpdates = {};
+    const setClauses = [];
+    const values = [];
 
     for (const [key, value] of Object.entries(updates)) {
       const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
       if (allowedFields.includes(snakeKey)) {
         if (snakeKey === 'notes') {
-          sanitizedUpdates[snakeKey] = value ? Encryption.encrypt(value) : null;
+          values.push(value ? Encryption.encrypt(value) : null);
         } else {
-          sanitizedUpdates[snakeKey] = value;
+          values.push(value);
         }
+        setClauses.push(`${snakeKey} = $${values.length}`);
       }
     }
 
-    sanitizedUpdates.updated_at = new Date().toISOString();
-
-    const { data: cycle, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .update(sanitizedUpdates)
-      .eq('id', cycleId)
-      .eq('user_id', userId)
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('Failed to update cycle', error);
-      throw error;
+    if (setClauses.length === 0) {
+      return this.getCycleById(userId, cycleId);
     }
 
-    // Recalculate averages
-    await this.updateAverages(userId);
+    setClauses.push(`updated_at = NOW()`);
+    values.push(cycleId, userId);
 
-    return this.formatCycle(cycle);
+    const result = await pool.query(
+      `UPDATE cycles SET ${setClauses.join(', ')}
+       WHERE id = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING *`,
+      values
+    );
+
+    await this.updateAverages(userId);
+    return this.formatCycle(result.rows[0]);
   }
 
   /**
    * Delete cycle
    */
   async deleteCycle(userId, cycleId) {
-    // Delete associated logs first
-    await supabaseAdmin
-      .from(dbConfig.tables.CYCLE_LOGS)
-      .delete()
-      .eq('cycle_id', cycleId);
+    await pool.query('DELETE FROM cycle_logs WHERE cycle_id = $1', [cycleId]);
 
-    const { error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .delete()
-      .eq('id', cycleId)
-      .eq('user_id', userId);
+    await pool.query(
+      'DELETE FROM cycles WHERE id = $1 AND user_id = $2',
+      [cycleId, userId]
+    );
 
-    if (error) {
-      logger.error('Failed to delete cycle', error);
-      throw error;
-    }
-
-    // Recalculate averages
     await this.updateAverages(userId);
 
     logger.info('Cycle deleted', { userId, cycleId });
@@ -387,17 +333,13 @@ class CycleService {
    * Get daily log for a specific date
    */
   async getDailyLog(userId, date) {
-    const { data: log, error } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLE_LOGS)
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .single();
+    const result = await pool.query(
+      'SELECT * FROM cycle_logs WHERE user_id = $1 AND date = $2',
+      [userId, date]
+    );
+    const log = result.rows[0];
 
-    if (error || !log) {
-      return null;
-    }
-
+    if (!log) return null;
     return this.formatCycleLog(log);
   }
 
@@ -405,14 +347,13 @@ class CycleService {
    * Get analytics/insights
    */
   async getAnalytics(userId, { startDate, endDate }) {
-    // Get cycles in range
-    const { data: cycles } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('*')
-      .eq('user_id', userId)
-      .gte('start_date', startDate)
-      .lte('start_date', endDate)
-      .order('start_date', { ascending: true });
+    const result = await pool.query(
+      `SELECT * FROM cycles
+       WHERE user_id = $1 AND start_date >= $2 AND start_date <= $3
+       ORDER BY start_date ASC`,
+      [userId, startDate, endDate]
+    );
+    const cycles = result.rows;
 
     if (!cycles || cycles.length === 0) {
       return {
@@ -425,7 +366,6 @@ class CycleService {
       };
     }
 
-    // Calculate cycle lengths
     const cycleLengths = [];
     const periodLengths = [];
 
@@ -508,19 +448,14 @@ class CycleService {
     const startDate = new Date(cycle.start_date);
     const today = new Date();
 
-    // Next period prediction
     const nextPeriodDate = new Date(startDate);
     nextPeriodDate.setDate(nextPeriodDate.getDate() + avgCycleLength);
-
     const daysUntilPeriod = Math.ceil((nextPeriodDate - today) / (1000 * 60 * 60 * 24));
 
-    // Ovulation prediction (typically 14 days before next period)
     const ovulationDate = new Date(nextPeriodDate);
     ovulationDate.setDate(ovulationDate.getDate() - 14);
-
     const daysUntilOvulation = Math.ceil((ovulationDate - today) / (1000 * 60 * 60 * 24));
 
-    // Fertile window (5 days before ovulation + ovulation day)
     const fertileStart = new Date(ovulationDate);
     fertileStart.setDate(fertileStart.getDate() - 5);
     const fertileEnd = new Date(ovulationDate);
@@ -546,16 +481,16 @@ class CycleService {
    * Update user's average cycle/period length
    */
   async updateAverages(userId) {
-    const { data: cycles } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('start_date, period_length')
-      .eq('user_id', userId)
-      .order('start_date', { ascending: true })
-      .limit(12); // Last 12 cycles
+    const result = await pool.query(
+      `SELECT start_date, period_length FROM cycles
+       WHERE user_id = $1
+       ORDER BY start_date ASC LIMIT 12`,
+      [userId]
+    );
+    const cycles = result.rows;
 
     if (!cycles || cycles.length < 2) return;
 
-    // Calculate average cycle length
     const cycleLengths = [];
     for (let i = 0; i < cycles.length - 1; i++) {
       const start = new Date(cycles[i].start_date);
@@ -566,28 +501,28 @@ class CycleService {
       }
     }
 
-    // Calculate average period length
-    const periodLengths = cycles
-      .filter(c => c.period_length)
-      .map(c => c.period_length);
+    const periodLengths = cycles.filter(c => c.period_length).map(c => c.period_length);
 
-    const updates = {};
+    const setClauses = [];
+    const values = [];
+
     if (cycleLengths.length > 0) {
-      updates.average_cycle_length = Math.round(
-        cycleLengths.reduce((a, b) => a + b, 0) / cycleLengths.length
-      );
+      const avg = Math.round(cycleLengths.reduce((a, b) => a + b, 0) / cycleLengths.length);
+      values.push(avg);
+      setClauses.push(`average_cycle_length = $${values.length}`);
     }
     if (periodLengths.length > 0) {
-      updates.average_period_length = Math.round(
-        periodLengths.reduce((a, b) => a + b, 0) / periodLengths.length
-      );
+      const avg = Math.round(periodLengths.reduce((a, b) => a + b, 0) / periodLengths.length);
+      values.push(avg);
+      setClauses.push(`average_period_length = $${values.length}`);
     }
 
-    if (Object.keys(updates).length > 0) {
-      await supabaseAdmin
-        .from(dbConfig.tables.HEALTH_PROFILES)
-        .update(updates)
-        .eq('user_id', userId);
+    if (setClauses.length > 0) {
+      values.push(userId);
+      await pool.query(
+        `UPDATE health_profiles SET ${setClauses.join(', ')} WHERE user_id = $${values.length}`,
+        values
+      );
     }
   }
 

@@ -4,7 +4,7 @@
  * Handles symptoms and mood tracking with encryption
  */
 
-const { supabaseAdmin, dbConfig } = require('../config/database');
+const { pool } = require('../config/database');
 const Encryption = require('../utils/encryption');
 const logger = require('../utils/logger');
 const { SYMPTOM_CATEGORIES, MOOD_TYPES } = require('../utils/constants');
@@ -18,58 +18,47 @@ class HealthService {
   async logSymptom(userId, data) {
     const { date, symptom, category, severity, notes, timeOfDay } = data;
 
-    const symptomData = {
-      user_id: userId,
-      date,
-      symptom,
-      category: category || SYMPTOM_CATEGORIES.PHYSICAL,
-      severity: severity || 2,
-      time_of_day: timeOfDay,
-      notes: notes ? Encryption.encrypt(notes) : null,
-      created_at: new Date().toISOString()
-    };
-
-    const { data: result, error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .insert(symptomData)
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('Failed to log symptom', error);
-      throw error;
-    }
+    const result = await pool.query(
+      `INSERT INTO symptoms
+         (user_id, date, symptom, category, severity, time_of_day, notes, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       RETURNING *`,
+      [
+        userId, date, symptom,
+        category || SYMPTOM_CATEGORIES.PHYSICAL,
+        severity || 2,
+        timeOfDay,
+        notes ? Encryption.encrypt(notes) : null
+      ]
+    );
 
     logger.debug('Symptom logged', { userId, symptom, date });
-    return this.formatSymptom(result);
+    return this.formatSymptom(result.rows[0]);
   }
 
   /**
    * Log multiple symptoms at once
    */
   async logMultipleSymptoms(userId, date, symptoms) {
-    const symptomRecords = symptoms.map(s => ({
-      user_id: userId,
-      date,
-      symptom: s.symptom,
-      category: s.category || SYMPTOM_CATEGORIES.PHYSICAL,
-      severity: s.severity || 2,
-      time_of_day: s.timeOfDay,
-      notes: s.notes ? Encryption.encrypt(s.notes) : null,
-      created_at: new Date().toISOString()
-    }));
+    const results = await Promise.all(
+      symptoms.map(s =>
+        pool.query(
+          `INSERT INTO symptoms
+             (user_id, date, symptom, category, severity, time_of_day, notes, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           RETURNING *`,
+          [
+            userId, date, s.symptom,
+            s.category || SYMPTOM_CATEGORIES.PHYSICAL,
+            s.severity || 2,
+            s.timeOfDay,
+            s.notes ? Encryption.encrypt(s.notes) : null
+          ]
+        )
+      )
+    );
 
-    const { data: results, error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .insert(symptomRecords)
-      .select('*');
-
-    if (error) {
-      logger.error('Failed to log multiple symptoms', error);
-      throw error;
-    }
-
-    return results.map(s => this.formatSymptom(s));
+    return results.map(r => this.formatSymptom(r.rows[0]));
   }
 
   /**
@@ -77,27 +66,32 @@ class HealthService {
    */
   async getSymptoms(userId, { page = 1, limit = 20, startDate, endDate, category, symptom }) {
     const offset = (page - 1) * limit;
+    const conditions = ['user_id = $1'];
+    const values = [userId];
 
-    let query = supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId);
+    if (startDate) { values.push(startDate); conditions.push(`date >= $${values.length}`); }
+    if (endDate) { values.push(endDate); conditions.push(`date <= $${values.length}`); }
+    if (category) { values.push(category); conditions.push(`category = $${values.length}`); }
+    if (symptom) { values.push(symptom); conditions.push(`symptom = $${values.length}`); }
 
-    if (startDate) query = query.gte('date', startDate);
-    if (endDate) query = query.lte('date', endDate);
-    if (category) query = query.eq('category', category);
-    if (symptom) query = query.eq('symptom', symptom);
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const { data: symptoms, count, error } = await query
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM symptoms ${whereClause}`,
+      values
+    );
 
-    if (error) throw error;
+    const dataValues = [...values, limit, offset];
+    const result = await pool.query(
+      `SELECT * FROM symptoms ${whereClause}
+       ORDER BY date DESC, created_at DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      dataValues
+    );
 
     return {
-      symptoms: symptoms.map(s => this.formatSymptom(s)),
-      pagination: { page, limit, total: count }
+      symptoms: result.rows.map(s => this.formatSymptom(s)),
+      pagination: { page, limit, total: parseInt(countResult.rows[0].count) }
     };
   }
 
@@ -105,16 +99,11 @@ class HealthService {
    * Get symptoms for a specific date
    */
   async getSymptomsByDate(userId, date) {
-    const { data: symptoms, error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-
-    return symptoms.map(s => this.formatSymptom(s));
+    const result = await pool.query(
+      `SELECT * FROM symptoms WHERE user_id = $1 AND date = $2 ORDER BY created_at ASC`,
+      [userId, date]
+    );
+    return result.rows.map(s => this.formatSymptom(s));
   }
 
   /**
@@ -122,50 +111,41 @@ class HealthService {
    */
   async updateSymptom(userId, symptomId, updates) {
     const allowedFields = ['severity', 'notes', 'time_of_day'];
-    const sanitizedUpdates = { updated_at: new Date().toISOString() };
+    const setClauses = [`updated_at = NOW()`];
+    const values = [];
 
     for (const [key, value] of Object.entries(updates)) {
       const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
       if (allowedFields.includes(snakeKey)) {
         if (snakeKey === 'notes') {
-          sanitizedUpdates[snakeKey] = value ? Encryption.encrypt(value) : null;
+          values.push(value ? Encryption.encrypt(value) : null);
         } else {
-          sanitizedUpdates[snakeKey] = value;
+          values.push(value);
         }
+        setClauses.push(`${snakeKey} = $${values.length}`);
       }
     }
 
-    const { data: symptom, error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .update(sanitizedUpdates)
-      .eq('id', symptomId)
-      .eq('user_id', userId)
-      .select('*')
-      .single();
+    values.push(symptomId, userId);
 
-    if (error) {
-      logger.error('Failed to update symptom', error);
-      throw error;
-    }
+    const result = await pool.query(
+      `UPDATE symptoms SET ${setClauses.join(', ')}
+       WHERE id = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING *`,
+      values
+    );
 
-    return this.formatSymptom(symptom);
+    return this.formatSymptom(result.rows[0]);
   }
 
   /**
    * Delete a symptom
    */
   async deleteSymptom(userId, symptomId) {
-    const { error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .delete()
-      .eq('id', symptomId)
-      .eq('user_id', userId);
-
-    if (error) {
-      logger.error('Failed to delete symptom', error);
-      throw error;
-    }
-
+    await pool.query(
+      'DELETE FROM symptoms WHERE id = $1 AND user_id = $2',
+      [symptomId, userId]
+    );
     return { message: 'Symptom deleted successfully' };
   }
 
@@ -177,56 +157,43 @@ class HealthService {
   async logMood(userId, data) {
     const { date, mood, intensity, notes, triggers } = data;
 
-    const moodData = {
-      user_id: userId,
-      date,
-      mood,
-      intensity: intensity || 3,
-      notes: notes ? Encryption.encrypt(notes) : null,
-      triggers: triggers ? Encryption.encrypt(JSON.stringify(triggers)) : null,
-      created_at: new Date().toISOString()
-    };
-
-    const { data: result, error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .insert(moodData)
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('Failed to log mood', error);
-      throw error;
-    }
+    const result = await pool.query(
+      `INSERT INTO moods (user_id, date, mood, intensity, notes, triggers, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING *`,
+      [
+        userId, date, mood,
+        intensity || 3,
+        notes ? Encryption.encrypt(notes) : null,
+        triggers ? Encryption.encrypt(JSON.stringify(triggers)) : null
+      ]
+    );
 
     logger.debug('Mood logged', { userId, mood, date });
-    return this.formatMood(result);
+    return this.formatMood(result.rows[0]);
   }
 
   /**
    * Log multiple moods at once
    */
   async logMultipleMoods(userId, date, moods) {
-    const moodRecords = moods.map(m => ({
-      user_id: userId,
-      date,
-      mood: m.mood,
-      intensity: m.intensity || 3,
-      notes: m.notes ? Encryption.encrypt(m.notes) : null,
-      triggers: m.triggers ? Encryption.encrypt(JSON.stringify(m.triggers)) : null,
-      created_at: new Date().toISOString()
-    }));
+    const results = await Promise.all(
+      moods.map(m =>
+        pool.query(
+          `INSERT INTO moods (user_id, date, mood, intensity, notes, triggers, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           RETURNING *`,
+          [
+            userId, date, m.mood,
+            m.intensity || 3,
+            m.notes ? Encryption.encrypt(m.notes) : null,
+            m.triggers ? Encryption.encrypt(JSON.stringify(m.triggers)) : null
+          ]
+        )
+      )
+    );
 
-    const { data: results, error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .insert(moodRecords)
-      .select('*');
-
-    if (error) {
-      logger.error('Failed to log multiple moods', error);
-      throw error;
-    }
-
-    return results.map(m => this.formatMood(m));
+    return results.map(r => this.formatMood(r.rows[0]));
   }
 
   /**
@@ -234,26 +201,31 @@ class HealthService {
    */
   async getMoods(userId, { page = 1, limit = 20, startDate, endDate, mood }) {
     const offset = (page - 1) * limit;
+    const conditions = ['user_id = $1'];
+    const values = [userId];
 
-    let query = supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId);
+    if (startDate) { values.push(startDate); conditions.push(`date >= $${values.length}`); }
+    if (endDate) { values.push(endDate); conditions.push(`date <= $${values.length}`); }
+    if (mood) { values.push(mood); conditions.push(`mood = $${values.length}`); }
 
-    if (startDate) query = query.gte('date', startDate);
-    if (endDate) query = query.lte('date', endDate);
-    if (mood) query = query.eq('mood', mood);
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const { data: moods, count, error } = await query
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM moods ${whereClause}`,
+      values
+    );
 
-    if (error) throw error;
+    const dataValues = [...values, limit, offset];
+    const result = await pool.query(
+      `SELECT * FROM moods ${whereClause}
+       ORDER BY date DESC, created_at DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      dataValues
+    );
 
     return {
-      moods: moods.map(m => this.formatMood(m)),
-      pagination: { page, limit, total: count }
+      moods: result.rows.map(m => this.formatMood(m)),
+      pagination: { page, limit, total: parseInt(countResult.rows[0].count) }
     };
   }
 
@@ -261,16 +233,11 @@ class HealthService {
    * Get moods for a specific date
    */
   async getMoodsByDate(userId, date) {
-    const { data: moods, error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-
-    return moods.map(m => this.formatMood(m));
+    const result = await pool.query(
+      'SELECT * FROM moods WHERE user_id = $1 AND date = $2 ORDER BY created_at ASC',
+      [userId, date]
+    );
+    return result.rows.map(m => this.formatMood(m));
   }
 
   /**
@@ -278,52 +245,43 @@ class HealthService {
    */
   async updateMood(userId, moodId, updates) {
     const allowedFields = ['intensity', 'notes', 'triggers'];
-    const sanitizedUpdates = { updated_at: new Date().toISOString() };
+    const setClauses = [`updated_at = NOW()`];
+    const values = [];
 
     for (const [key, value] of Object.entries(updates)) {
       const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
       if (allowedFields.includes(snakeKey)) {
         if (snakeKey === 'notes') {
-          sanitizedUpdates[snakeKey] = value ? Encryption.encrypt(value) : null;
+          values.push(value ? Encryption.encrypt(value) : null);
         } else if (snakeKey === 'triggers') {
-          sanitizedUpdates[snakeKey] = value ? Encryption.encrypt(JSON.stringify(value)) : null;
+          values.push(value ? Encryption.encrypt(JSON.stringify(value)) : null);
         } else {
-          sanitizedUpdates[snakeKey] = value;
+          values.push(value);
         }
+        setClauses.push(`${snakeKey} = $${values.length}`);
       }
     }
 
-    const { data: mood, error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .update(sanitizedUpdates)
-      .eq('id', moodId)
-      .eq('user_id', userId)
-      .select('*')
-      .single();
+    values.push(moodId, userId);
 
-    if (error) {
-      logger.error('Failed to update mood', error);
-      throw error;
-    }
+    const result = await pool.query(
+      `UPDATE moods SET ${setClauses.join(', ')}
+       WHERE id = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING *`,
+      values
+    );
 
-    return this.formatMood(mood);
+    return this.formatMood(result.rows[0]);
   }
 
   /**
    * Delete a mood
    */
   async deleteMood(userId, moodId) {
-    const { error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .delete()
-      .eq('id', moodId)
-      .eq('user_id', userId);
-
-    if (error) {
-      logger.error('Failed to delete mood', error);
-      throw error;
-    }
-
+    await pool.query(
+      'DELETE FROM moods WHERE id = $1 AND user_id = $2',
+      [moodId, userId]
+    );
     return { message: 'Mood deleted successfully' };
   }
 
@@ -333,51 +291,35 @@ class HealthService {
    * Get symptom analytics
    */
   async getSymptomAnalytics(userId, { startDate, endDate }) {
-    const { data: symptoms, error } = await supabaseAdmin
-      .from(dbConfig.tables.SYMPTOMS)
-      .select('symptom, category, severity, date')
-      .eq('user_id', userId)
-      .gte('date', startDate)
-      .lte('date', endDate);
+    const result = await pool.query(
+      `SELECT symptom, category, severity, date FROM symptoms
+       WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      [userId, startDate, endDate]
+    );
+    const symptoms = result.rows;
 
-    if (error) throw error;
-
-    // Count by symptom
     const symptomCounts = {};
     const categoryBreakdown = {};
     const severityBySymptom = {};
 
     for (const s of symptoms) {
-      // Symptom frequency
       symptomCounts[s.symptom] = (symptomCounts[s.symptom] || 0) + 1;
-
-      // Category breakdown
       categoryBreakdown[s.category] = (categoryBreakdown[s.category] || 0) + 1;
 
-      // Severity tracking
-      if (!severityBySymptom[s.symptom]) {
-        severityBySymptom[s.symptom] = [];
-      }
+      if (!severityBySymptom[s.symptom]) severityBySymptom[s.symptom] = [];
       severityBySymptom[s.symptom].push(s.severity);
     }
 
-    // Calculate average severity
     const avgSeverity = {};
     for (const [symptom, severities] of Object.entries(severityBySymptom)) {
-      avgSeverity[symptom] = Math.round(
-        (severities.reduce((a, b) => a + b, 0) / severities.length) * 10
-      ) / 10;
+      avgSeverity[symptom] =
+        Math.round((severities.reduce((a, b) => a + b, 0) / severities.length) * 10) / 10;
     }
 
-    // Top symptoms
     const topSymptoms = Object.entries(symptomCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
-      .map(([symptom, count]) => ({
-        symptom,
-        count,
-        avgSeverity: avgSeverity[symptom]
-      }));
+      .map(([symptom, count]) => ({ symptom, count, avgSeverity: avgSeverity[symptom] }));
 
     return {
       totalEntries: symptoms.length,
@@ -391,37 +333,28 @@ class HealthService {
    * Get mood analytics
    */
   async getMoodAnalytics(userId, { startDate, endDate }) {
-    const { data: moods, error } = await supabaseAdmin
-      .from(dbConfig.tables.MOODS)
-      .select('mood, intensity, date')
-      .eq('user_id', userId)
-      .gte('date', startDate)
-      .lte('date', endDate);
+    const result = await pool.query(
+      `SELECT mood, intensity, date FROM moods
+       WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      [userId, startDate, endDate]
+    );
+    const moods = result.rows;
 
-    if (error) throw error;
-
-    // Count by mood
     const moodCounts = {};
     const intensityByMood = {};
 
     for (const m of moods) {
       moodCounts[m.mood] = (moodCounts[m.mood] || 0) + 1;
-
-      if (!intensityByMood[m.mood]) {
-        intensityByMood[m.mood] = [];
-      }
+      if (!intensityByMood[m.mood]) intensityByMood[m.mood] = [];
       intensityByMood[m.mood].push(m.intensity);
     }
 
-    // Calculate average intensity
     const avgIntensity = {};
     for (const [mood, intensities] of Object.entries(intensityByMood)) {
-      avgIntensity[mood] = Math.round(
-        (intensities.reduce((a, b) => a + b, 0) / intensities.length) * 10
-      ) / 10;
+      avgIntensity[mood] =
+        Math.round((intensities.reduce((a, b) => a + b, 0) / intensities.length) * 10) / 10;
     }
 
-    // Mood distribution
     const moodDistribution = Object.entries(moodCounts)
       .map(([mood, count]) => ({
         mood,
@@ -460,13 +393,12 @@ class HealthService {
    * Get health trends for cycle correlation
    */
   async getHealthTrends(userId, cycleId) {
-    // Get cycle
-    const { data: cycle } = await supabaseAdmin
-      .from(dbConfig.tables.CYCLES)
-      .select('start_date, end_date, period_end_date')
-      .eq('id', cycleId)
-      .eq('user_id', userId)
-      .single();
+    const cycleResult = await pool.query(
+      `SELECT start_date, end_date, period_end_date FROM cycles
+       WHERE id = $1 AND user_id = $2`,
+      [cycleId, userId]
+    );
+    const cycle = cycleResult.rows[0];
 
     if (!cycle) {
       const error = new Error('Cycle not found');
@@ -476,33 +408,29 @@ class HealthService {
 
     const endDate = cycle.end_date || new Date().toISOString().split('T')[0];
 
-    // Get symptoms and moods for cycle
-    const [{ data: symptoms }, { data: moods }] = await Promise.all([
-      supabaseAdmin
-        .from(dbConfig.tables.SYMPTOMS)
-        .select('symptom, category, severity, date')
-        .eq('user_id', userId)
-        .gte('date', cycle.start_date)
-        .lte('date', endDate),
-      supabaseAdmin
-        .from(dbConfig.tables.MOODS)
-        .select('mood, intensity, date')
-        .eq('user_id', userId)
-        .gte('date', cycle.start_date)
-        .lte('date', endDate)
+    const [symptomsResult, moodsResult] = await Promise.all([
+      pool.query(
+        `SELECT symptom, category, severity, date FROM symptoms
+         WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+        [userId, cycle.start_date, endDate]
+      ),
+      pool.query(
+        `SELECT mood, intensity, date FROM moods
+         WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+        [userId, cycle.start_date, endDate]
+      )
     ]);
 
-    // Group by cycle day
     const dailyData = {};
     const startDate = new Date(cycle.start_date);
 
-    for (const s of symptoms || []) {
+    for (const s of symptomsResult.rows) {
       const day = Math.ceil((new Date(s.date) - startDate) / (1000 * 60 * 60 * 24)) + 1;
       if (!dailyData[day]) dailyData[day] = { symptoms: [], moods: [] };
       dailyData[day].symptoms.push(s);
     }
 
-    for (const m of moods || []) {
+    for (const m of moodsResult.rows) {
       const day = Math.ceil((new Date(m.date) - startDate) / (1000 * 60 * 60 * 24)) + 1;
       if (!dailyData[day]) dailyData[day] = { symptoms: [], moods: [] };
       dailyData[day].moods.push(m);

@@ -21,20 +21,25 @@ Complete API reference for the Satsflow mobile application backend.
 9. [Community](#community)
 10. [Constants & Enums](#constants--enums)
 11. [Error Codes](#error-codes)
+12. [Rate Limits](#rate-limits)
 
 ---
 
 ## Authentication
 
-All authenticated endpoints require the `Authorization` header:
+All protected endpoints require the `Authorization` header:
 
 ```
 Authorization: Bearer <access_token>
 ```
 
+Access tokens expire in `15m`. When expired, call `/auth/refresh` with the refresh token to get a new pair.
+
+---
+
 ### Register
 
-Create a new user account.
+Create a new user account. A verification email is sent automatically.
 
 ```http
 POST /auth/register
@@ -52,11 +57,7 @@ POST /auth/register
 }
 ```
 
-**Password Requirements:**
-- Minimum 8 characters
-- At least one uppercase letter
-- At least one lowercase letter
-- At least one number
+**Password Requirements:** 8+ chars, one uppercase, one lowercase, one number.
 
 **Response (201):**
 ```json
@@ -82,8 +83,6 @@ POST /auth/register
 ---
 
 ### Login
-
-Authenticate user and receive tokens.
 
 ```http
 POST /auth/login
@@ -121,7 +120,7 @@ POST /auth/login
 
 ### Refresh Token
 
-Get new access token using refresh token.
+Swap a refresh token for a new access + refresh pair. The old refresh token is revoked immediately.
 
 ```http
 POST /auth/refresh
@@ -151,7 +150,7 @@ POST /auth/refresh
 
 ### Logout
 
-Invalidate the current refresh token.
+Revoke the current refresh token (single device).
 
 ```http
 POST /auth/logout
@@ -177,9 +176,73 @@ POST /auth/logout
 
 ---
 
+### Logout All Devices
+
+Revoke every refresh token for the authenticated user.
+
+```http
+POST /auth/logout-all
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Logged out from all devices",
+  "data": null
+}
+```
+
+---
+
+### Verify Email
+
+Confirm the user's email address using the token sent in the verification email.
+
+```http
+GET /auth/verify-email/:token
+```
+
+**URL Param:** `:token` — token from the verification email link.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Email verified successfully"
+}
+```
+
+---
+
+### Resend Verification Email
+
+```http
+POST /auth/resend-verification
+```
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "If an account exists, a verification email has been sent"
+}
+```
+
+---
+
 ### Forgot Password
 
-Request a password reset email.
+Request a password reset email. Always returns the same message to prevent email enumeration.
 
 ```http
 POST /auth/forgot-password
@@ -204,11 +267,13 @@ POST /auth/forgot-password
 
 ### Reset Password
 
-Reset password using token from email.
+Reset password using the token from the reset email. Valid for 1 hour, single-use. All refresh tokens are revoked on success.
 
 ```http
 POST /auth/reset-password/:token
 ```
+
+**URL Param:** `:token` — token from the reset email link.
 
 **Request Body:**
 ```json
@@ -230,7 +295,7 @@ POST /auth/reset-password/:token
 
 ### Change Password
 
-Change password for authenticated user.
+Change password for the currently authenticated user. All refresh tokens are revoked on success.
 
 ```http
 PUT /auth/change-password
@@ -244,6 +309,36 @@ PUT /auth/change-password
   "currentPassword": "OldPassword123",
   "newPassword": "NewPassword456",
   "confirmNewPassword": "NewPassword456"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Password changed successfully"
+}
+```
+
+---
+
+### Get Current User
+
+```http
+GET /auth/me
+```
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "role": "user"
+  }
 }
 ```
 
@@ -287,13 +382,16 @@ GET /users/profile
 PUT /users/profile
 ```
 
-**Request Body:**
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body (all fields optional):**
 ```json
 {
   "name": "Jane Smith",
-  "dateOfBirth": "1995-05-15",
+  "date_of_birth": "1995-05-15",
   "timezone": "Africa/Nairobi",
-  "language": "en"
+  "language": "en",
+  "avatar_url": "https://cdn.example.com/avatar.jpg"
 }
 ```
 
@@ -301,11 +399,13 @@ PUT /users/profile
 
 ### Get Health Profile
 
-Contains encrypted health information.
+Returns decrypted health information.
 
 ```http
 GET /users/health-profile
 ```
+
+**Headers:** `Authorization: Bearer <token>` (required)
 
 **Response (200):**
 ```json
@@ -326,6 +426,8 @@ GET /users/health-profile
 }
 ```
 
+> `health_conditions`, `medications`, and `notes` are encrypted at rest and decrypted before returning.
+
 ---
 
 ### Update Health Profile
@@ -334,7 +436,9 @@ GET /users/health-profile
 PUT /users/health-profile
 ```
 
-**Request Body:**
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body (all fields optional):**
 ```json
 {
   "averageCycleLength": 30,
@@ -355,6 +459,8 @@ PUT /users/health-profile
 ```http
 GET /users/preferences
 ```
+
+**Headers:** `Authorization: Bearer <token>` (required)
 
 **Response (200):**
 ```json
@@ -384,7 +490,9 @@ GET /users/preferences
 PUT /users/preferences
 ```
 
-**Request Body:**
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Request Body (all fields optional, merged with existing):**
 ```json
 {
   "notifications": {
@@ -401,21 +509,25 @@ PUT /users/preferences
 
 ### Export User Data
 
-GDPR-compliant data export.
+GDPR-compliant full data export (user, health profile, cycles, symptoms, moods).
 
 ```http
 GET /users/export
 ```
 
+**Headers:** `Authorization: Bearer <token>` (required)
+
 ---
 
 ### Delete Account
 
-Requires password confirmation.
+Soft-deletes the account. Requires password confirmation.
 
 ```http
 DELETE /users/account
 ```
+
+**Headers:** `Authorization: Bearer <token>` (required)
 
 **Request Body:**
 ```json
@@ -429,11 +541,9 @@ DELETE /users/account
 
 ## Cycle Profile
 
-Lightweight cycle setup used to drive home-screen predictions. This is separate from the full Cycle Tracking module.
+Lightweight cycle setup used by the home-screen widget. Separate from the full Cycle Tracking module.
 
 ### Create / Update Cycle Profile
-
-Create or replace the authenticated user's cycle profile.
 
 ```http
 POST /cycle-profile
@@ -462,10 +572,12 @@ POST /cycle-profile
   "success": true,
   "message": "Cycle profile saved",
   "data": {
+    "id": "uuid",
     "user_id": "uuid",
     "cycle_length": 28,
     "period_length": 5,
-    "last_period_start": "2024-01-15"
+    "last_period_start": "2024-01-15",
+    "created_at": "2024-01-15T00:00:00.000Z"
   }
 }
 ```
@@ -474,7 +586,7 @@ POST /cycle-profile
 
 ### Get Cycle Profile
 
-Retrieve the cycle profile with live calculations (current day, phase, days until next period).
+Returns the stored profile plus live calculations.
 
 ```http
 GET /cycle-profile
@@ -488,6 +600,7 @@ GET /cycle-profile
   "success": true,
   "message": "Cycle profile retrieved",
   "data": {
+    "id": "uuid",
     "user_id": "uuid",
     "cycle_length": 28,
     "period_length": 5,
@@ -499,17 +612,17 @@ GET /cycle-profile
 }
 ```
 
-**Phases:** `menstrual`, `follicular`, `ovulation`, `luteal`
+**Phases:** `menstrual` · `follicular` · `ovulation` · `luteal`
 
-**Response (404):** Returned when no profile has been created yet.
+**Response (404):** Returned when no profile exists yet.
 
 ---
 
 ## Cycle Tracking
 
-### Start Period
+All endpoints require `Authorization: Bearer <token>`.
 
-Begin tracking a new period/cycle.
+### Start Period
 
 ```http
 POST /cycles/start
@@ -524,7 +637,7 @@ POST /cycles/start
 }
 ```
 
-**Flow Intensity Options:** `spotting`, `light`, `medium`, `heavy`
+**Flow Intensity:** `spotting` · `light` · `medium` · `heavy`
 
 **Response (201):**
 ```json
@@ -548,8 +661,6 @@ POST /cycles/start
 
 ### End Period
 
-Mark the end of menstrual bleeding.
-
 ```http
 POST /cycles/end
 ```
@@ -561,17 +672,17 @@ POST /cycles/end
 }
 ```
 
+**Response (200):** Returns the updated cycle with `periodEndDate` and `periodLength` set.
+
 ---
 
 ### Log Daily Entry
-
-Log daily tracking data.
 
 ```http
 POST /cycles/log
 ```
 
-**Request Body:**
+**Request Body (all fields except `date` optional):**
 ```json
 {
   "date": "2024-01-16",
@@ -584,13 +695,13 @@ POST /cycles/log
 }
 ```
 
-**Cervical Mucus Options:** `dry`, `sticky`, `creamy`, `watery`, `egg_white`
+**Cervical Mucus:** `dry` · `sticky` · `creamy` · `watery` · `egg_white`
+
+If an entry already exists for the date it is updated; otherwise a new one is created.
 
 ---
 
 ### Get Current Cycle
-
-Get current cycle status with predictions.
 
 ```http
 GET /cycles/current
@@ -610,18 +721,9 @@ GET /cycles/current
       "description": "Menstrual phase - Period days"
     },
     "predictions": {
-      "nextPeriod": {
-        "date": "2024-02-12",
-        "daysUntil": 23
-      },
-      "ovulation": {
-        "date": "2024-01-29",
-        "daysUntil": 9
-      },
-      "fertileWindow": {
-        "start": "2024-01-24",
-        "end": "2024-01-30"
-      }
+      "nextPeriod": { "date": "2024-02-12", "daysUntil": 23 },
+      "ovulation":  { "date": "2024-01-29", "daysUntil": 9 },
+      "fertileWindow": { "start": "2024-01-24", "end": "2024-01-30" }
     }
   }
 }
@@ -635,6 +737,8 @@ GET /cycles/current
 GET /cycles/predictions
 ```
 
+Returns the same prediction object as the current cycle endpoint.
+
 ---
 
 ### Get Cycle History
@@ -643,18 +747,26 @@ GET /cycles/predictions
 GET /cycles?page=1&limit=20&startDate=2024-01-01&endDate=2024-12-31
 ```
 
+**Query Parameters (all optional):**
+
+| Param | Description |
+|-------|-------------|
+| `page` | Page number (default: 1) |
+| `limit` | Results per page (default: 20) |
+| `startDate` | Filter cycles starting on or after this date |
+| `endDate` | Filter cycles starting on or before this date |
+
 **Response (200):**
 ```json
 {
   "success": true,
-  "data": [...],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 6,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
+  "data": {
+    "cycles": [...],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 6
+    }
   }
 }
 ```
@@ -691,37 +803,25 @@ GET /cycles/analytics?startDate=2024-01-01&endDate=2024-06-30
 GET /cycles/log/:date
 ```
 
----
+**URL Param:** `:date` — date in `YYYY-MM-DD` format.
 
-### Get Cycle by ID
-
-```http
-GET /cycles/:cycleId
-```
+Returns `null` if no entry exists for that date.
 
 ---
 
-### Update Cycle
+### Get / Update / Delete Cycle by ID
 
 ```http
-PUT /cycles/:cycleId
-```
-
----
-
-### Delete Cycle
-
-```http
-DELETE /cycles/:cycleId
+GET    /cycles/:id
+PUT    /cycles/:id
+DELETE /cycles/:id
 ```
 
 ---
 
 ## Day Logs
 
-A flexible daily log that consolidates period, symptoms, moods, vitals, and notes in one entry per day.
-
-All endpoints require authentication.
+A flexible daily log — one entry per date — that consolidates period status, symptoms, moods, vitals, and notes. All endpoints require authentication.
 
 ### Get Day Log
 
@@ -729,22 +829,15 @@ All endpoints require authentication.
 GET /logs?date=YYYY-MM-DD
 ```
 
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Query Parameters:**
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `date` | Yes | Date in `YYYY-MM-DD` format |
-
 **Response (200):**
 ```json
 {
   "success": true,
   "message": "Day log retrieved",
   "data": {
+    "id": "uuid",
     "user_id": "uuid",
-    "date": "2024-01-15",
+    "log_date": "2024-01-15",
     "period_start": true,
     "period_end": false,
     "flow_level": "medium",
@@ -754,26 +847,25 @@ GET /logs?date=YYYY-MM-DD
     "note": "Felt tired all day",
     "weight": 62.5,
     "temperature": 36.7,
-    "water_intake": 1800
+    "water_intake": 1800,
+    "created_at": "2024-01-15T08:00:00.000Z"
   }
 }
 ```
 
-Returns `null` data when no log exists for the requested date.
+Returns `null` data when no log exists for the date.
 
 ---
 
 ### Upsert Day Log
 
-Create or update the log for a specific date. Only include the fields you want to set — omitted fields are left unchanged.
+Create or update the log for a specific date. Send only the fields you want to set.
 
 ```http
 PUT /logs/:date
 ```
 
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**URL Parameter:** `:date` — date in `YYYY-MM-DD` format
+**URL Param:** `:date` — date in `YYYY-MM-DD` format.
 
 **Request Body (all fields optional):**
 ```json
@@ -791,49 +883,28 @@ PUT /logs/:date
 }
 ```
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Day log saved",
-  "data": { ... }
-}
-```
+**Response (200):** Returns the full saved log object.
 
 ---
 
 ### Get Day Logs Range
 
-Retrieve all logs for an inclusive date range.
-
 ```http
 GET /logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD
 ```
 
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Query Parameters:**
-
 | Param | Required | Description |
 |-------|----------|-------------|
-| `from` | Yes | Start date (`YYYY-MM-DD`), must not be after `to` |
-| `to` | Yes | End date (`YYYY-MM-DD`) |
+| `from` | Yes | Start date (inclusive) |
+| `to` | Yes | End date (inclusive) |
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Logs range retrieved",
-  "data": [
-    { "date": "2024-01-15", "flow_level": "medium", ... },
-    { "date": "2024-01-16", "flow_level": "heavy",  ... }
-  ]
-}
-```
+**Response (200):** Array of log objects ordered by date ascending.
 
 ---
 
 ## Health (Symptoms & Moods)
+
+All endpoints require `Authorization: Bearer <token>`.
 
 ### Log Symptom
 
@@ -853,11 +924,11 @@ POST /health/symptoms
 }
 ```
 
-**Categories:** `physical`, `emotional`, `pain`, `digestive`, `skin`, `sleep`
+**Categories:** `physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep`
 
-**Severity:** `1` (mild), `2` (moderate), `3` (severe)
+**Severity:** `1` (mild) · `2` (moderate) · `3` (severe) · up to `5`
 
-**Time of Day:** `morning`, `afternoon`, `evening`, `night`, `all_day`
+**Time of Day:** `morning` · `afternoon` · `evening` · `night`
 
 ---
 
@@ -872,9 +943,9 @@ POST /health/symptoms/batch
 {
   "date": "2024-01-15",
   "symptoms": [
-    { "symptom": "cramps", "category": "pain", "severity": 2 },
+    { "symptom": "cramps",   "category": "pain",     "severity": 2 },
     { "symptom": "bloating", "category": "physical", "severity": 1 },
-    { "symptom": "headache", "category": "pain", "severity": 2 }
+    { "symptom": "headache", "category": "pain",     "severity": 2 }
   ]
 }
 ```
@@ -884,7 +955,18 @@ POST /health/symptoms/batch
 ### Get Symptoms
 
 ```http
-GET /health/symptoms?page=1&limit=20&startDate=2024-01-01&category=pain
+GET /health/symptoms?page=1&limit=20&startDate=2024-01-01&endDate=2024-03-31&category=pain
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "symptoms": [...],
+    "pagination": { "page": 1, "limit": 20, "total": 45 }
+  }
+}
 ```
 
 ---
@@ -893,6 +975,15 @@ GET /health/symptoms?page=1&limit=20&startDate=2024-01-01&category=pain
 
 ```http
 GET /health/symptoms/date/2024-01-15
+```
+
+---
+
+### Update / Delete Symptom
+
+```http
+PUT    /health/symptoms/:id
+DELETE /health/symptoms/:id
 ```
 
 ---
@@ -914,9 +1005,9 @@ POST /health/moods
 }
 ```
 
-**Moods:** `happy`, `sad`, `irritable`, `anxious`, `energetic`, `tired`, `calm`, `stressed`, `emotional`, `confident`
+**Moods:** `happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident`
 
-**Intensity:** `1` to `5`
+**Intensity:** `1` (very low) to `5` (very high)
 
 ---
 
@@ -932,7 +1023,7 @@ POST /health/moods/batch
   "date": "2024-01-15",
   "moods": [
     { "mood": "energetic", "intensity": 4 },
-    { "mood": "happy", "intensity": 3 }
+    { "mood": "happy",     "intensity": 3 }
   ]
 }
 ```
@@ -943,6 +1034,23 @@ POST /health/moods/batch
 
 ```http
 GET /health/moods?page=1&limit=20&startDate=2024-01-01&mood=happy
+```
+
+---
+
+### Get Moods by Date
+
+```http
+GET /health/moods/date/2024-01-15
+```
+
+---
+
+### Update / Delete Mood
+
+```http
+PUT    /health/moods/:id
+DELETE /health/moods/:id
 ```
 
 ---
@@ -960,18 +1068,15 @@ GET /health/analytics/symptoms?startDate=2024-01-01&endDate=2024-03-31
   "data": {
     "totalEntries": 45,
     "topSymptoms": [
-      { "symptom": "cramps", "count": 12, "avgSeverity": 2.1 },
-      { "symptom": "headache", "count": 8, "avgSeverity": 1.8 }
+      { "symptom": "cramps",   "count": 12, "avgSeverity": 2.1 },
+      { "symptom": "headache", "count": 8,  "avgSeverity": 1.8 }
     ],
     "categoryBreakdown": {
       "pain": 20,
       "physical": 15,
       "emotional": 10
     },
-    "dateRange": {
-      "startDate": "2024-01-01",
-      "endDate": "2024-03-31"
-    }
+    "dateRange": { "startDate": "2024-01-01", "endDate": "2024-03-31" }
   }
 }
 ```
@@ -984,11 +1089,26 @@ GET /health/analytics/symptoms?startDate=2024-01-01&endDate=2024-03-31
 GET /health/analytics/moods?startDate=2024-01-01&endDate=2024-03-31
 ```
 
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "totalEntries": 38,
+    "moodDistribution": [
+      { "mood": "happy", "count": 12, "percentage": 32, "avgIntensity": 3.8 },
+      { "mood": "tired", "count": 9,  "percentage": 24, "avgIntensity": 3.1 }
+    ],
+    "dateRange": { "startDate": "2024-01-01", "endDate": "2024-03-31" }
+  }
+}
+```
+
 ---
 
 ### Get Daily Summary
 
-Combined symptoms and moods for a date.
+Combined symptoms and moods for one date.
 
 ```http
 GET /health/summary/2024-01-15
@@ -1012,7 +1132,7 @@ GET /health/summary/2024-01-15
 
 ### Get Health Trends
 
-Health data correlated with a specific cycle.
+Symptom and mood data correlated by cycle day for a specific cycle.
 
 ```http
 GET /health/trends/:cycleId
@@ -1022,25 +1142,15 @@ GET /health/trends/:cycleId
 
 ## Journal
 
-Personal diary entries grouped by month.
-
-All endpoints require authentication.
+Private diary entries. All endpoints require `Authorization: Bearer <token>`.
 
 ### Get Journal Entries
 
-Retrieve all entries for a given calendar month.
+Retrieve all entries for a calendar month.
 
 ```http
 GET /journal?month=YYYY-MM
 ```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Query Parameters:**
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `month` | Yes | Month in `YYYY-MM` format |
 
 **Response (200):**
 ```json
@@ -1053,7 +1163,8 @@ GET /journal?month=YYYY-MM
       "user_id": "uuid",
       "entry_date": "2024-01-15",
       "content": "Feeling much better today.",
-      "created_at": "2024-01-15T20:00:00.000Z"
+      "created_at": "2024-01-15T20:00:00.000Z",
+      "updated_at": "2024-01-15T20:00:00.000Z"
     }
   ]
 }
@@ -1066,8 +1177,6 @@ GET /journal?month=YYYY-MM
 ```http
 POST /journal
 ```
-
-**Headers:** `Authorization: Bearer <token>` (required)
 
 **Request Body:**
 ```json
@@ -1101,19 +1210,15 @@ POST /journal
 
 ## Water Settings
 
-Per-user water intake goal and cup configuration.
-
-All endpoints require authentication.
+Per-user water intake goal and cup configuration. All endpoints require `Authorization: Bearer <token>`.
 
 ### Get Water Settings
 
-Returns the user's saved settings, or sensible defaults if none have been set.
+Returns saved settings, or defaults if none have been set.
 
 ```http
 GET /water-settings
 ```
-
-**Headers:** `Authorization: Bearer <token>` (required)
 
 **Response (200):**
 ```json
@@ -1129,19 +1234,15 @@ GET /water-settings
 }
 ```
 
-**Defaults:** `water_target` = 2000 ml, `cup_capacity` = 250 ml, `cup_style` = `"standard"`
+**Defaults:** `water_target` = 2000 ml · `cup_capacity` = 250 ml · `cup_style` = `"standard"`
 
 ---
 
 ### Update Water Settings
 
-Provide at least one field to update.
-
 ```http
 PUT /water-settings
 ```
-
-**Headers:** `Authorization: Bearer <token>` (required)
 
 **Request Body (all fields optional):**
 ```json
@@ -1154,23 +1255,9 @@ PUT /water-settings
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| `water_target` | integer | Positive integer (ml) |
-| `cup_capacity` | integer | Positive integer (ml) |
+| `water_target` | integer | > 0 (ml) |
+| `cup_capacity` | integer | > 0 (ml) |
 | `cup_style` | string | Free-form label |
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Water settings updated",
-  "data": {
-    "user_id": "uuid",
-    "water_target": 2500,
-    "cup_capacity": 300,
-    "cup_style": "large"
-  }
-}
-```
 
 ---
 
@@ -1188,12 +1275,10 @@ GET /threads?tab=recent&search=cramps&page=1&limit=20
 
 **Auth:** Optional (`Authorization: Bearer <token>`)
 
-**Query Parameters:**
-
 | Param | Default | Description |
 |-------|---------|-------------|
-| `tab` | `recent` | Feed filter: `recent` or `popular` |
-| `search` | — | Full-text search string |
+| `tab` | `recent` | `recent` or `popular` |
+| `search` | — | Content search string |
 | `page` | `1` | Page number |
 | `limit` | `20` | Results per page (max 50) |
 
@@ -1201,25 +1286,27 @@ GET /threads?tab=recent&search=cramps&page=1&limit=20
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "user_id": "uuid",
-      "content": "Anyone else dealing with PCOS?",
-      "image_url": null,
-      "like_count": 12,
-      "comment_count": 4,
-      "is_liked_by_me": false,
-      "created_at": "2024-01-15T10:00:00.000Z"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
+  "data": {
+    "threads": [
+      {
+        "id": "uuid",
+        "content": "Anyone else dealing with PCOS?",
+        "image_url": null,
+        "created_at": "2024-01-15T10:00:00.000Z",
+        "updated_at": "2024-01-15T10:00:00.000Z",
+        "user": {
+          "id": "uuid",
+          "name": "Jane Doe",
+          "avatar_url": null
+        },
+        "like_count": 12,
+        "comment_count": 4,
+        "is_liked_by_me": false
+      }
+    ],
     "total": 42,
-    "totalPages": 3,
-    "hasNext": true,
-    "hasPrev": false
+    "page": 1,
+    "limit": 20
   }
 }
 ```
@@ -1252,7 +1339,17 @@ POST /threads
 {
   "success": true,
   "message": "Thread created",
-  "data": { "id": "uuid", "content": "...", ... }
+  "data": {
+    "id": "uuid",
+    "content": "Anyone else dealing with PCOS?",
+    "image_url": null,
+    "created_at": "2024-01-15T10:00:00.000Z",
+    "user": {
+      "id": "uuid",
+      "name": "Jane Doe",
+      "avatar_url": null
+    }
+  }
 }
 ```
 
@@ -1274,10 +1371,13 @@ GET /threads/:id/comments
   "data": [
     {
       "id": "uuid",
-      "thread_id": "uuid",
-      "user_id": "uuid",
       "content": "Me too!",
-      "created_at": "2024-01-15T11:00:00.000Z"
+      "created_at": "2024-01-15T11:00:00.000Z",
+      "user": {
+        "id": "uuid",
+        "name": "Jane Doe",
+        "avatar_url": null
+      }
     }
   ]
 }
@@ -1286,6 +1386,8 @@ GET /threads/:id/comments
 ---
 
 ### Add Comment
+
+A notification is automatically sent to the thread author (unless they are the commenter).
 
 ```http
 POST /threads/:id/comments
@@ -1305,13 +1407,24 @@ POST /threads/:id/comments
 {
   "success": true,
   "message": "Comment added",
-  "data": { "id": "uuid", "content": "Me too!", ... }
+  "data": {
+    "id": "uuid",
+    "content": "Me too!",
+    "created_at": "2024-01-15T11:00:00.000Z",
+    "user": {
+      "id": "uuid",
+      "name": "Jane Doe",
+      "avatar_url": null
+    }
+  }
 }
 ```
 
 ---
 
 ### Like Thread
+
+Idempotent — liking an already-liked thread is a no-op. A notification is sent to the author.
 
 ```http
 POST /threads/:id/like
@@ -1324,7 +1437,7 @@ POST /threads/:id/like
 {
   "success": true,
   "message": "Thread liked",
-  "data": { "like_count": 13, "is_liked_by_me": true }
+  "data": { "like_count": 13 }
 }
 ```
 
@@ -1343,13 +1456,15 @@ DELETE /threads/:id/like
 {
   "success": true,
   "message": "Like removed",
-  "data": { "like_count": 12, "is_liked_by_me": false }
+  "data": { "like_count": 12 }
 }
 ```
 
 ---
 
 ### Get Notifications
+
+Returns the 50 most recent notifications.
 
 ```http
 GET /notifications
@@ -1366,13 +1481,28 @@ GET /notifications
     {
       "id": "uuid",
       "type": "comment",
-      "thread_id": "uuid",
-      "read": false,
-      "created_at": "2024-01-15T12:00:00.000Z"
+      "message": "Someone commented on your post",
+      "is_read": false,
+      "created_at": "2024-01-15T12:00:00.000Z",
+      "actor": {
+        "id": "uuid",
+        "name": "Jane Doe",
+        "avatar_url": null
+      }
+    },
+    {
+      "id": "uuid",
+      "type": "like",
+      "message": "Someone liked your post",
+      "is_read": true,
+      "created_at": "2024-01-14T09:00:00.000Z",
+      "actor": null
     }
   ]
 }
 ```
+
+**Notification types:** `comment` · `like`
 
 ---
 
@@ -1399,47 +1529,32 @@ PATCH /notifications/read-all
 
 ### Cycle Phases
 
-| Phase | Description |
-|-------|-------------|
-| `menstrual` | Days 1-5: Period |
-| `follicular` | Days 6-14: Pre-ovulation |
-| `ovulation` | Days 14-16: Fertile window |
-| `luteal` | Days 17-28: Post-ovulation |
+| Phase | Typical Days | Description |
+|-------|-------------|-------------|
+| `menstrual` | 1–5 | Period |
+| `follicular` | 6–13 | Pre-ovulation |
+| `ovulation` | 14–16 | Fertile window |
+| `luteal` | 17–28 | Post-ovulation |
 
 ### Flow Intensity
 
-- `spotting`
-- `light`
-- `medium`
-- `heavy`
+`spotting` · `light` · `medium` · `heavy`
 
 ### Symptom Categories
 
-- `physical`
-- `emotional`
-- `pain`
-- `digestive`
-- `skin`
-- `sleep`
+`physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep`
 
 ### Mood Types
 
-- `happy`
-- `sad`
-- `irritable`
-- `anxious`
-- `energetic`
-- `tired`
-- `calm`
-- `stressed`
-- `emotional`
-- `confident`
+`happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident`
 
 ### Privacy Levels
 
-- `private` - Only user can see
-- `friends` - Friends can see
-- `public` - Everyone can see
+`private` · `friends` · `public`
+
+### Account Status
+
+`active` · `inactive` · `suspended` · `deleted`
 
 ---
 
@@ -1447,12 +1562,12 @@ PATCH /notifications/read-all
 
 | Status | Description |
 |--------|-------------|
-| 400 | Bad Request - Invalid input |
-| 401 | Unauthorized - Invalid/expired token |
-| 403 | Forbidden - Insufficient permissions |
-| 404 | Not Found - Resource doesn't exist |
-| 409 | Conflict - Resource already exists |
-| 429 | Too Many Requests - Rate limited |
+| 400 | Bad Request — Invalid or missing input |
+| 401 | Unauthorized — Token missing, invalid, or expired |
+| 403 | Forbidden — Insufficient permissions |
+| 404 | Not Found — Resource does not exist |
+| 409 | Conflict — Resource already exists (e.g. duplicate email) |
+| 429 | Too Many Requests — Rate limited |
 | 500 | Internal Server Error |
 
 ### Error Response Format
@@ -1474,23 +1589,39 @@ PATCH /notifications/read-all
 
 ---
 
+## Standard Response Envelope
+
+All responses share the same structure:
+
+```json
+{
+  "success": true,
+  "message": "Human-readable message",
+  "data": { ... },
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+---
+
 ## Rate Limits
 
-| Endpoint | Limit |
-|----------|-------|
+| Endpoint Group | Limit |
+|----------------|-------|
 | General API | 100 requests / 15 min |
 | Authentication | 5 requests / 15 min |
-| Password Reset | 3 requests / hour |
+| Password reset | 3 requests / hour |
 | Registration | 5 requests / hour |
-| Sensitive Data | 30 requests / min |
+| Sensitive data | 30 requests / min |
 
 ---
 
 ## Notes for Mobile Developers
 
-1. **Token Management**: Store tokens securely (Keychain/Keystore)
-2. **Token Refresh**: Implement automatic token refresh before expiry
-3. **Offline Support**: Cache cycle/health data locally
-4. **Date Format**: Always use ISO 8601 format (`YYYY-MM-DD`)
-5. **Timezone**: Server uses UTC; convert to user's timezone in app
-6. **Encryption**: Health data is encrypted at rest; no client-side decryption needed
+1. **Token storage** — Store tokens in Keychain (iOS) / Keystore (Android)
+2. **Token refresh** — Refresh the access token before it expires (`expiresIn: "15m"`); refresh tokens are rotated on each use
+3. **Date format** — Always use ISO 8601 (`YYYY-MM-DD`) for date fields
+4. **Timezone** — All timestamps are UTC; convert to the user's timezone in the app
+5. **Health data** — Encrypted at rest; decrypted automatically before API responses — no client-side decryption needed
+6. **Offline** — Cache cycle and health data locally; sync on reconnect
+7. **Email verification** — Prompt the user to verify email after registration; `emailVerified: false` in the register response signals this
