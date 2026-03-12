@@ -33,6 +33,17 @@ const communityController = {
     }
   },
 
+  async getThread(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id ?? null;
+      const thread = await communityService.getThread(id, userId);
+      return ApiResponse.success(res, thread, 'Thread retrieved');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   async createThread(req, res) {
     try {
       const { content, image_url } = req.body;
@@ -49,6 +60,27 @@ const communityController = {
       });
 
       return ApiResponse.created(res, thread, 'Thread created');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async updateThread(req, res) {
+    try {
+      const { id } = req.params;
+      const { content, image_url } = req.body;
+      const thread = await communityService.updateThread(req.user.id, id, { content, image_url });
+      return ApiResponse.success(res, thread, 'Thread updated');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async deleteThread(req, res) {
+    try {
+      const { id } = req.params;
+      await communityService.deleteThread(req.user.id, id, req.user.role);
+      return ApiResponse.success(res, null, 'Thread deleted');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -81,6 +113,30 @@ const communityController = {
 
       const comment = await communityService.addComment(req.user.id, id, content.trim());
       return ApiResponse.created(res, comment, 'Comment added');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async updateComment(req, res) {
+    try {
+      const { id: threadId, commentId } = req.params;
+      const { content } = req.body;
+      if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return ApiResponse.validationError(res, [{ field: 'content', message: 'content is required' }]);
+      }
+      const comment = await communityService.updateComment(req.user.id, threadId, commentId, content.trim());
+      return ApiResponse.success(res, comment, 'Comment updated');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async deleteComment(req, res) {
+    try {
+      const { id: threadId, commentId } = req.params;
+      await communityService.deleteComment(req.user.id, threadId, commentId, req.user.role);
+      return ApiResponse.success(res, null, 'Comment deleted');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -127,6 +183,16 @@ const communityController = {
     try {
       await communityService.markAllRead(req.user.id);
       return ApiResponse.success(res, null, 'All notifications marked as read');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async markNotificationRead(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await communityService.markNotificationRead(req.user.id, notificationId);
+      return ApiResponse.success(res, result, 'Notification marked as read');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

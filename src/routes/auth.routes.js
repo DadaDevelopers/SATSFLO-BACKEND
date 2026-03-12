@@ -82,10 +82,12 @@ router.post(
 );
 
 /**
- * @route   GET /api/v1/auth/verify-email/:token
+ * @route   GET /api/v1/auth/verify-email?token=  (deep-link / query param)
+ * @route   GET /api/v1/auth/verify-email/:token  (path param — kept for backwards compat)
  * @desc    Verify email address
  * @access  Public
  */
+router.get('/verify-email', authController.verifyEmail);
 router.get(
   '/verify-email/:token',
   verifyEmailValidation,

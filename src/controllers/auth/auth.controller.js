@@ -97,7 +97,11 @@ const logoutAll = async (req, res, next) => {
  */
 const verifyEmail = async (req, res, next) => {
   try {
-    const { token } = req.params;
+    const token = req.params.token || req.query.token;
+
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Verification token is required' });
+    }
 
     const result = await authService.verifyEmail(token);
 
