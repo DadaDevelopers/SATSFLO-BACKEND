@@ -102,6 +102,21 @@ router.get(
   cycleController.getDailyLog
 );
 
+// ==================== CYCLE LOGS (nested) ====================
+
+/**
+ * @route   POST /api/v1/cycles/:cycleId/logs
+ * @desc    Add a daily log to a specific cycle
+ * @access  Private
+ */
+router.post(
+  '/:cycleId/logs',
+  cycleIdParamValidation,
+  logDailyEntryValidation,
+  validate,
+  cycleController.addCycleLog
+);
+
 // ==================== CYCLE HISTORY ====================
 
 /**

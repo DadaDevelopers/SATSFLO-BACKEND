@@ -202,10 +202,28 @@ const getPredictions = async (req, res, next) => {
   }
 };
 
+/**
+ * Add log to a specific cycle
+ * POST /api/v1/cycles/:cycleId/logs
+ */
+const addCycleLog = async (req, res, next) => {
+  try {
+    const entry = await cycleService.logDailyEntry(req.user.id, {
+      ...req.body,
+      cycleId: req.params.cycleId
+    });
+
+    return ApiResponse.success(res, entry, 'Cycle log added');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   startPeriod,
   endPeriod,
   logDailyEntry,
+  addCycleLog,
   getCurrentCycle,
   getCycles,
   getCycleById,

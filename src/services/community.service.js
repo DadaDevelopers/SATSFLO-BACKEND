@@ -160,6 +160,168 @@ class CommunityService {
     return { ...comment, user: userResult.rows[0] };
   }
 
+  /**
+   * Get a single thread by ID with comment list and is_liked_by_me.
+   */
+  async getThread(threadId, userId = null) {
+    const result = await pool.query(
+      `SELECT
+         t.id, t.content, t.image_url, t.created_at, t.updated_at,
+         u.id         AS user_id,
+         u.name       AS user_name,
+         u.avatar_url AS user_avatar_url,
+         (SELECT COUNT(*) FROM thread_comments WHERE thread_id = t.id) AS comment_count,
+         (SELECT COUNT(*) FROM thread_likes    WHERE thread_id = t.id) AS like_count
+       FROM threads t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.id = $1`,
+      [threadId]
+    );
+    const t = result.rows[0];
+    if (!t) {
+      const err = new Error('Thread not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    let is_liked_by_me = false;
+    if (userId) {
+      const likeResult = await pool.query(
+        'SELECT 1 FROM thread_likes WHERE thread_id = $1 AND user_id = $2',
+        [threadId, userId]
+      );
+      is_liked_by_me = likeResult.rows.length > 0;
+    }
+
+    const comments = await this.getComments(threadId);
+
+    return {
+      id: t.id,
+      content: t.content,
+      image_url: t.image_url,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      user: { id: t.user_id, name: t.user_name, avatar_url: t.user_avatar_url },
+      comment_count: parseInt(t.comment_count),
+      like_count: parseInt(t.like_count),
+      is_liked_by_me,
+      comments
+    };
+  }
+
+  /**
+   * Update a thread (only by owner).
+   */
+  async updateThread(userId, threadId, { content, image_url }) {
+    const existing = await pool.query(
+      'SELECT user_id FROM threads WHERE id = $1',
+      [threadId]
+    );
+    if (!existing.rows[0]) {
+      const err = new Error('Thread not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (existing.rows[0].user_id !== userId) {
+      const err = new Error('Not authorised to edit this thread');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const fields = [];
+    const values = [];
+    if (content !== undefined) { values.push(content); fields.push(`content = $${values.length}`); }
+    if (image_url !== undefined) { values.push(image_url); fields.push(`image_url = $${values.length}`); }
+
+    if (fields.length === 0) {
+      const err = new Error('No fields to update');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    values.push(threadId);
+    const result = await pool.query(
+      `UPDATE threads SET ${fields.join(', ')} WHERE id = $${values.length} RETURNING id, content, image_url, updated_at`,
+      values
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Delete a thread (only by owner or admin).
+   */
+  async deleteThread(userId, threadId, userRole) {
+    const existing = await pool.query(
+      'SELECT user_id FROM threads WHERE id = $1',
+      [threadId]
+    );
+    if (!existing.rows[0]) {
+      const err = new Error('Thread not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (existing.rows[0].user_id !== userId && userRole !== 'admin') {
+      const err = new Error('Not authorised to delete this thread');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    await pool.query('DELETE FROM threads WHERE id = $1', [threadId]);
+  }
+
+  /**
+   * Update a comment (only by owner).
+   */
+  async updateComment(userId, threadId, commentId, content) {
+    const existing = await pool.query(
+      'SELECT user_id FROM thread_comments WHERE id = $1 AND thread_id = $2',
+      [commentId, threadId]
+    );
+    if (!existing.rows[0]) {
+      const err = new Error('Comment not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (existing.rows[0].user_id !== userId) {
+      const err = new Error('Not authorised to edit this comment');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const result = await pool.query(
+      'UPDATE thread_comments SET content = $1 WHERE id = $2 RETURNING id, content, created_at',
+      [content, commentId]
+    );
+    const comment = result.rows[0];
+    const userResult = await pool.query(
+      'SELECT id, name, avatar_url FROM users WHERE id = $1',
+      [userId]
+    );
+    return { ...comment, user: userResult.rows[0] };
+  }
+
+  /**
+   * Delete a comment (only by owner or admin).
+   */
+  async deleteComment(userId, threadId, commentId, userRole) {
+    const existing = await pool.query(
+      'SELECT user_id FROM thread_comments WHERE id = $1 AND thread_id = $2',
+      [commentId, threadId]
+    );
+    if (!existing.rows[0]) {
+      const err = new Error('Comment not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (existing.rows[0].user_id !== userId && userRole !== 'admin') {
+      const err = new Error('Not authorised to delete this comment');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    await pool.query('DELETE FROM thread_comments WHERE id = $1', [commentId]);
+  }
+
   // ──────────────────────────────────────────────
   // LIKES
   // ──────────────────────────────────────────────
@@ -240,6 +402,22 @@ class CommunityService {
       'UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false',
       [userId]
     );
+  }
+
+  /**
+   * Mark a single notification as read (must belong to the user).
+   */
+  async markNotificationRead(userId, notificationId) {
+    const result = await pool.query(
+      'UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2 RETURNING id, is_read',
+      [notificationId, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Notification not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    return result.rows[0];
   }
 }
 

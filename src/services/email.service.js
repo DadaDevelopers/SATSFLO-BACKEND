@@ -78,7 +78,8 @@ class EmailService {
    * Send verification email
    */
   async sendVerificationEmail(email, token, name = 'there') {
-    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+    const deepLinkBase = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL;
+    const verifyUrl = `${deepLinkBase}/verify-email?token=${token}`;
 
     const html = `
       <!DOCTYPE html>
@@ -142,7 +143,8 @@ class EmailService {
    * Send password reset email
    */
   async sendPasswordResetEmail(email, token, name = 'there') {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const deepLinkBase = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL;
+    const resetUrl = `${deepLinkBase}/reset-password?token=${token}`;
 
     const html = `
       <!DOCTYPE html>
