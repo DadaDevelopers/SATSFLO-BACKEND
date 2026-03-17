@@ -47,6 +47,30 @@ const journalController = {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
   },
+
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+      if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return ApiResponse.validationError(res, [{ field: 'content', message: 'content is required' }]);
+      }
+      const entry = await journalService.update(req.user.id, id, { content: content.trim() });
+      return ApiResponse.success(res, entry, 'Journal entry updated');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      await journalService.delete(req.user.id, id);
+      return ApiResponse.success(res, null, 'Journal entry deleted');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
 };
 
 module.exports = journalController;

@@ -109,6 +109,13 @@ router.post(
 );
 
 /**
+ * @route   POST /api/v1/auth/verify-otp
+ * @desc    Verify email with 6-digit OTP
+ * @access  Public
+ */
+router.post('/verify-otp', authLimiter, authController.verifyOtp);
+
+/**
  * @route   POST /api/v1/auth/forgot-password
  * @desc    Request password reset
  * @access  Public

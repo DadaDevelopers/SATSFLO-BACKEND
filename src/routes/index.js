@@ -16,6 +16,7 @@ const dayLogsRoutes      = require('./dayLogs.routes');
 const waterSettingsRoutes = require('./waterSettings.routes');
 const journalRoutes      = require('./journal.routes');
 const communityRoutes    = require('./community.routes');
+const paymentRoutes      = require('./payment.routes');
 const ApiResponse = require('../utils/response');
 
 /**
@@ -50,6 +51,7 @@ router.get('/', (req, res) => {
       logs: '/api/v1/logs',
       waterSettings: '/api/v1/water-settings',
       journal: '/api/v1/journal',
+      payments: '/api/v1/payments',
       threads: '/api/v1/threads',
       notifications: '/api/v1/notifications',
     }
@@ -65,6 +67,7 @@ router.use('/cycle-profile',  cycleProfileRoutes);
 router.use('/logs',           dayLogsRoutes);
 router.use('/water-settings', waterSettingsRoutes);
 router.use('/journal',        journalRoutes);
+router.use('/payments',       paymentRoutes);
 router.use('/',               communityRoutes);   // /threads, /notifications
 
 module.exports = router;

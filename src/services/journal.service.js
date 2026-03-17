@@ -39,6 +39,27 @@ class JournalService {
 
     return result.rows[0];
   }
+
+  async update(userId, entryId, { content }) {
+    const result = await pool.query(
+      `UPDATE ${TABLE} SET content = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
+      [content, entryId, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;
+    }
+    return result.rows[0];
+  }
+
+  async delete(userId, entryId) {
+    const result = await pool.query(
+      `DELETE FROM ${TABLE} WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [entryId, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;
+    }
+  }
 }
 
 module.exports = new JournalService();

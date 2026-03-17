@@ -36,17 +36,18 @@ class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = String(Math.floor(100000 + Math.random() * 900000));
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     const result = await pool.query(
       `INSERT INTO users
          (email, password_hash, name, date_of_birth, verification_token,
-          verification_expires, role, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'user', 'active', NOW())
+          verification_expires, email_otp, email_otp_expires, role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'user', 'active', NOW())
        RETURNING id, email, name, role, created_at`,
       [email.toLowerCase(), passwordHash, name, dateOfBirth,
-       verificationToken, verificationExpires]
+       verificationToken, verificationExpires, verificationToken, emailOtpExpires]
     );
     const user = result.rows[0];
 
@@ -265,17 +266,46 @@ class AuthService {
       throw error;
     }
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = String(Math.floor(100000 + Math.random() * 900000));
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     await pool.query(
-      'UPDATE users SET verification_token = $1, verification_expires = $2 WHERE id = $3',
-      [verificationToken, verificationExpires, user.id]
+      'UPDATE users SET verification_token = $1, verification_expires = $2, email_otp = $3, email_otp_expires = $4 WHERE id = $5',
+      [verificationToken, verificationExpires, verificationToken, emailOtpExpires, user.id]
     );
 
     await emailService.sendVerificationEmail(user.email, verificationToken, user.name);
 
     return { message: 'Verification email sent' };
+  }
+
+  /**
+   * Verify OTP code
+   */
+  async verifyOtp(email, otp) {
+    const result = await pool.query(
+      'SELECT id, email_otp, email_otp_expires, email_verified FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    const user = result.rows[0];
+    if (!user) {
+      const err = new Error('User not found'); err.statusCode = 404; throw err;
+    }
+    if (user.email_verified) {
+      return { message: 'Email already verified' };
+    }
+    if (!user.email_otp || user.email_otp !== String(otp)) {
+      const err = new Error('Invalid OTP'); err.statusCode = 400; throw err;
+    }
+    if (new Date(user.email_otp_expires) < new Date()) {
+      const err = new Error('OTP has expired'); err.statusCode = 400; throw err;
+    }
+    await pool.query(
+      'UPDATE users SET email_verified = true, email_otp = NULL, email_otp_expires = NULL, verification_token = NULL WHERE id = $1',
+      [user.id]
+    );
+    return { message: 'Email verified successfully' };
   }
 
   /**

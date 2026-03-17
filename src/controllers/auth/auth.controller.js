@@ -161,6 +161,23 @@ const resetPassword = async (req, res, next) => {
 };
 
 /**
+ * Verify OTP code
+ * POST /api/v1/auth/verify-otp
+ */
+const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'email and otp are required' });
+    }
+    const result = await authService.verifyOtp(email, String(otp));
+    return ApiResponse.success(res, result, 'Email verified successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Change password (authenticated)
  * PUT /api/v1/auth/change-password
  */
@@ -203,6 +220,7 @@ module.exports = {
   logout,
   logoutAll,
   verifyEmail,
+  verifyOtp,
   resendVerification,
   forgotPassword,
   resetPassword,
