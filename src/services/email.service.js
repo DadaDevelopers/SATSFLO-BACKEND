@@ -76,11 +76,9 @@ class EmailService {
 
   /**
    * Send verification email
+   * token is the 6-digit OTP code
    */
   async sendVerificationEmail(email, token, name = 'there') {
-    const deepLinkBase = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL;
-    const verifyUrl = `${deepLinkBase}/verify-email?token=${token}`;
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -91,7 +89,8 @@ class EmailService {
           .header { background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
           .header h1 { color: white; margin: 0; font-size: 28px; }
           .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; background: #FF6B9D; color: white; padding: 14px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 20px 0; }
+          .otp-box { background: #fff; border: 2px solid #FF6B9D; border-radius: 12px; padding: 20px 30px; text-align: center; margin: 24px 0; }
+          .otp-code { font-size: 42px; font-weight: bold; letter-spacing: 8px; color: #C44569; margin: 0; }
           .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
         </style>
       </head>
@@ -102,12 +101,12 @@ class EmailService {
           </div>
           <div class="content">
             <p>Hi ${name},</p>
-            <p>Thanks for signing up for Satsflow! Please verify your email address to get started.</p>
-            <p style="text-align: center;">
-              <a href="${verifyUrl}" class="button">Verify Email</a>
-            </p>
-            <p>Or copy this link: <br><small>${verifyUrl}</small></p>
-            <p>This link expires in 24 hours.</p>
+            <p>Thanks for signing up for Satsflow! Use the code below to verify your email address.</p>
+            <div class="otp-box">
+              <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">Your verification code is:</p>
+              <p class="otp-code"><strong>${token}</strong></p>
+            </div>
+            <p>This code expires in <strong>10 minutes</strong>.</p>
             <p>If you didn't create an account, you can safely ignore this email.</p>
           </div>
           <div class="footer">
@@ -123,17 +122,16 @@ class EmailService {
 
       Hi ${name},
 
-      Thanks for signing up! Please verify your email by visiting:
-      ${verifyUrl}
+      Thanks for signing up! Your verification code is: ${token}
 
-      This link expires in 24 hours.
+      This code expires in 10 minutes.
 
       If you didn't create an account, you can safely ignore this email.
     `;
 
     return this.sendEmail({
       to: email,
-      subject: 'Verify your Satsflow account',
+      subject: 'Your Satsflow verification code',
       html,
       text
     });

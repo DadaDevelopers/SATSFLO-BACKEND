@@ -14,4 +14,10 @@ router.get('/', journalController.getByMonth);
 // POST /api/v1/journal                — create entry
 router.post('/', journalController.create);
 
+// PUT  /api/v1/journal/:id            — update entry
+router.put('/:id', journalController.update);
+
+// DELETE /api/v1/journal/:id          — delete entry
+router.delete('/:id', journalController.delete);
+
 module.exports = router;

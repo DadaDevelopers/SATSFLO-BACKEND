@@ -167,14 +167,17 @@ body: { refreshToken: string }
 ### Email Verification
 
 ```
-// Deep-link flow (email → Expo app → API):
-// 1. Email contains: satsflo:///verify-email?token=TOKEN
-// 2. Expo opens /verify-email screen, reads token from URL query params
-// 3. App calls:
-GET  /auth/verify-email/:token           — token as path param (preferred from app code)
-GET  /auth/verify-email?token=TOKEN      — token as query param (alias, also accepted)
+// OTP flow (preferred):
+// 1. After registration, a 6-digit OTP is sent to the user's email
+// 2. User enters the code in the app, which calls:
+POST /auth/verify-otp
+body: { email: string; otp: string }   — 6-digit code sent to email at registration
 
-POST /auth/resend-verification           — resend email (body: { email })
+// Deep-link flow (legacy, still supported):
+GET  /auth/verify-email/:token           — token as path param
+GET  /auth/verify-email?token=TOKEN      — token as query param
+
+POST /auth/resend-verification           — resend OTP (body: { email })
 ```
 
 ### Password Reset
@@ -659,6 +662,68 @@ PATCH /notifications/read-all               — mark all notifications read
 
 ---
 
+## Payment / Gift Endpoints
+
+**Base path**: `/payments`  — all require `Authorization` header except webhook.
+
+### Send a Tip
+
+```
+POST /payments/tip
+body: {
+  recipient_id: string;    // UUID of the user to tip
+  amount_sats: number;     // amount in satoshis
+  thread_id?: string;      // optional — thread context
+  note?: string;           // optional message
+}
+response.data: {
+  transaction_id: string;
+  invoice: string;           // BOLT11 invoice — open with lightning:<invoice>
+  payment_hash: string;      // use this to poll status
+  amount_sats: number;
+  expires_at: string;        // ISO datetime — invoice expires in 10 minutes
+}
+```
+
+Deep-link to open in wallet: `lightning:<invoice>`
+
+### Poll Payment Status
+
+```
+GET /payments/status/:paymentHash
+response.data: {
+  id, payment_hash, amount_sats,
+  status: 'pending' | 'completed' | 'failed',
+  created_at, expires_at
+}
+```
+
+Poll every 2s for up to 60s. Stop when `status !== 'pending'`.
+
+### Payment History
+
+```
+GET /payments/history?type=sent       — default
+GET /payments/history?type=received
+response.data: [
+  {
+    id, amount_sats, status, note, created_at, thread_id, payment_hash,
+    sender: { id, name, avatar_url }    // when type=received
+    recipient: { id, name, avatar_url } // when type=sent
+  }
+]
+```
+
+### Set Lightning Address (in profile update)
+
+The recipient must have a `lightning_address` set on their profile:
+```
+PUT /users/profile
+body: { lightning_address: "username@wallet.domain" }
+```
+
+---
+
 ## Error Handling Pattern
 
 ```ts
@@ -740,6 +805,9 @@ export async function logout() {
 | Post thread | `POST /threads` |
 | Like / comment | `POST /threads/:id/like`, `POST /threads/:id/comments` |
 | Notifications | `GET /notifications`, `PATCH /notifications/read-all`, `PATCH /notifications/:id/read` |
+| Gift / tip send | `POST /payments/tip` → open `lightning:<invoice>` |
+| Gift / tip receive | `GET /payments/history?type=received` |
+| Poll payment | `GET /payments/status/:paymentHash` every 2s |
 | Cycle history | `GET /cycles?page=1&limit=10` |
 | Cycle analytics | `GET /cycles/analytics` |
 | Change password | `POST /auth/change-password` |
@@ -756,3 +824,6 @@ export async function logout() {
 - Community read endpoints (`GET /threads`, `GET /threads/:id`) work without auth — pass the token if the user is logged in to get personalised data (e.g. `is_liked`).
 - Rate limits are stricter on health/auth routes — avoid aggressive polling.
 - The `cycle-profile` endpoint (`POST /cycle-profile`) is an upsert — safe to call on every onboarding save.
+- OTP codes are 6 digits, valid for 10 minutes. Sent to email on registration and resend-verification.
+- Tips require the recipient to have set a `lightning_address` on their profile.
+- Set `ALLOWED_ORIGINS=https://yourapp.com` in `.env` for production CORS.
