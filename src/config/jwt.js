@@ -4,7 +4,12 @@
  * Handles token expiration and signing options
  */
 
-require('dotenv').config();
+const path = require('path');
+
+require('dotenv').config({
+  path: path.resolve(__dirname, '../../.env'),
+  quiet: true
+});
 
 module.exports = {
   secret: process.env.JWT_SECRET,

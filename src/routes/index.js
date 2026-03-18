@@ -17,15 +17,15 @@ const waterSettingsRoutes = require('./waterSettings.routes');
 const journalRoutes      = require('./journal.routes');
 const communityRoutes    = require('./community.routes');
 const paymentRoutes      = require('./payment.routes');
-const walletRoutes       = require('./wallet.routes');
-const partnerRoutes      = require('./partner.routes');
-const chatRoutes         = require('./chat.routes');
-const groupRoutes        = require('./group.routes');
+const lightningRoutes    = require('./lightning.routes');
 const ApiResponse = require('../utils/response');
+
+const API_VERSION = process.env.API_VERSION || 'v1';
+const API_BASE_PATH = `/api/${API_VERSION}`;
 
 /**
  * API Health check
- * GET /api/v1/health
+ * GET /api/:version/health
  */
 router.get('/health', (req, res) => {
   return ApiResponse.success(res, {
@@ -38,26 +38,28 @@ router.get('/health', (req, res) => {
 
 /**
  * API Info
- * GET /api/v1
+ * GET /api/:version
  */
 router.get('/', (req, res) => {
   return ApiResponse.success(res, {
     name: 'Satsflow API',
     version: '1.0.0',
+    apiVersion: API_VERSION,
     description: 'Period tracking with Bitcoin Lightning rewards',
-    documentation: '/api/v1/docs',
+    documentation: `${API_BASE_PATH}/docs`,
     endpoints: {
-      auth: '/api/v1/auth',
-      users: '/api/v1/users',
-      cycles: '/api/v1/cycles',
-      health: '/api/v1/health',
-      cycleProfile: '/api/v1/cycle-profile',
-      logs: '/api/v1/logs',
-      waterSettings: '/api/v1/water-settings',
-      journal: '/api/v1/journal',
-      payments: '/api/v1/payments',
-      threads: '/api/v1/threads',
-      notifications: '/api/v1/notifications',
+      auth: `${API_BASE_PATH}/auth`,
+      users: `${API_BASE_PATH}/users`,
+      cycles: `${API_BASE_PATH}/cycles`,
+      health: `${API_BASE_PATH}/health`,
+      cycleProfile: `${API_BASE_PATH}/cycle-profile`,
+      logs: `${API_BASE_PATH}/logs`,
+      waterSettings: `${API_BASE_PATH}/water-settings`,
+      journal: `${API_BASE_PATH}/journal`,
+      payments: `${API_BASE_PATH}/payments`,
+      lightning: `${API_BASE_PATH}/lightning`,
+      threads: `${API_BASE_PATH}/threads`,
+      notifications: `${API_BASE_PATH}/notifications`,
     }
   });
 });
@@ -72,10 +74,7 @@ router.use('/logs',           dayLogsRoutes);
 router.use('/water-settings', waterSettingsRoutes);
 router.use('/journal',        journalRoutes);
 router.use('/payments',       paymentRoutes);
-router.use('/wallet',         walletRoutes);
-router.use('/partner',        partnerRoutes);
-router.use('/chats',          chatRoutes);
-router.use('/groups',         groupRoutes);
+router.use('/lightning',      lightningRoutes);
 router.use('/',               communityRoutes);   // /threads, /notifications
 
 module.exports = router;

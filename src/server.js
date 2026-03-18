@@ -4,7 +4,11 @@
  * Starts the Express server and handles graceful shutdown
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({
+  path: path.resolve(__dirname, '../.env'),
+  quiet: true
+});
 const app = require('./app');
 const { pool } = require('./config/database');
 const logger = require('./utils/logger');
@@ -12,6 +16,8 @@ const emailService = require('./services/email.service');
 
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const API_VERSION = process.env.API_VERSION || 'v1';
+const API_BASE_PATH = `/api/${API_VERSION}`;
 
 let server;
 
@@ -41,13 +47,13 @@ async function startServer() {
 ║   Status:      Running                                    ║
 ║   Port:        ${PORT}                                        ║
 ║   Environment: ${NODE_ENV.padEnd(11)}                            ║
-║   API Base:    http://localhost:${PORT}/api/v1               ║
+║   API Base:    http://localhost:${PORT}${API_BASE_PATH}               ║
 ║                                                           ║
 ║   Endpoints:                                              ║
-║   • Auth:      /api/v1/auth                               ║
-║   • Users:     /api/v1/users                              ║
-║   • Cycles:    /api/v1/cycles                             ║
-║   • Health:    /api/v1/health                             ║
+║   • Auth:      ${API_BASE_PATH}/auth                               ║
+║   • Users:     ${API_BASE_PATH}/users                              ║
+║   • Cycles:    ${API_BASE_PATH}/cycles                             ║
+║   • Health:    ${API_BASE_PATH}/health                             ║
 ║                                                           ║
 ║   Health Check: http://localhost:${PORT}/health              ║
 ║                                                           ║

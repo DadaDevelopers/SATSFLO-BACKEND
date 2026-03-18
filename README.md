@@ -59,8 +59,10 @@ Required `.env` variables:
 # Server
 NODE_ENV=development
 PORT=3000
+API_VERSION=v1
 
-# PostgreSQL
+# PostgreSQL (DATABASE_URL takes precedence if set)
+DATABASE_URL=postgresql://satsflow_user:your_db_password@localhost:5432/satsflow
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=satsflow
@@ -82,10 +84,22 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_app_password
+EMAIL_FROM=Satsflow <noreply@satsflow.com>
 
 # App
-FRONTEND_URL=http://localhost:8081
+FRONTEND_URL=http://localhost:8080
+
+# Rate limiting / logging
+RATE_LIMIT_WINDOW=15
+RATE_LIMIT_MAX_REQUESTS=100
+LOG_LEVEL=debug
+
+# Lightning (reserved for future integration)
+# LIGHTNING_NODE_URL=
+# LIGHTNING_API_KEY=
 ```
+
+`MAX_FILE_SIZE` is still present in `.env.example` as a reserved app setting, but it is not yet wired into backend runtime behavior.
 
 ### 3. Create the database
 
@@ -194,6 +208,8 @@ SATSFLO-BACKEND/
 ```
 http://localhost:3000/api/v1
 ```
+
+Examples below assume the default `API_VERSION=v1`. If you change `API_VERSION`, replace `v1` in the route prefix accordingly.
 
 ### Authentication
 

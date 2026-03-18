@@ -6,10 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "dotenv -- node-pg-migrate --migrations-dir src/database/migrations up",
-    "migrate:down": "dotenv -- node-pg-migrate --migrations-dir src/database/migrations down",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down",
     "migrate:create": "dotenv -- node-pg-migrate --migrations-dir src/database/migrations create",
-    "migrate:status": "dotenv -- node-pg-migrate --migrations-dir src/database/migrations status",
+    "migrate:status": "node scripts/migration-status.js",
     "seed": "node src/database/seeds/index.js",
     "lint": "eslint src/",
     "format": "prettier --write \"src/**/*.js\"",

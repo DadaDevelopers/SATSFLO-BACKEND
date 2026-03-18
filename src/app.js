@@ -8,7 +8,11 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({
+  path: path.resolve(__dirname, '../.env'),
+  quiet: true
+});
 
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -17,6 +21,8 @@ const { sanitizeBody } = require('./middleware/validator');
 const logger = require('./utils/logger');
 
 const app = express();
+const API_VERSION = process.env.API_VERSION || 'v1';
+const API_BASE_PATH = `/api/${API_VERSION}`;
 
 // ==================== SECURITY MIDDLEWARE ====================
 
@@ -89,7 +95,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/v1', routes);
+app.use(API_BASE_PATH, routes);
 
 // ==================== ERROR HANDLING ====================
 
