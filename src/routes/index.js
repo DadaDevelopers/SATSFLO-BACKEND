@@ -17,6 +17,10 @@ const waterSettingsRoutes = require('./waterSettings.routes');
 const journalRoutes      = require('./journal.routes');
 const communityRoutes    = require('./community.routes');
 const paymentRoutes      = require('./payment.routes');
+const walletRoutes       = require('./wallet.routes');
+const partnerRoutes      = require('./partner.routes');
+const chatRoutes         = require('./chat.routes');
+const groupRoutes        = require('./group.routes');
 const ApiResponse = require('../utils/response');
 
 /**
@@ -68,6 +72,10 @@ router.use('/logs',           dayLogsRoutes);
 router.use('/water-settings', waterSettingsRoutes);
 router.use('/journal',        journalRoutes);
 router.use('/payments',       paymentRoutes);
+router.use('/wallet',         walletRoutes);
+router.use('/partner',        partnerRoutes);
+router.use('/chats',          chatRoutes);
+router.use('/groups',         groupRoutes);
 router.use('/',               communityRoutes);   // /threads, /notifications
 
 module.exports = router;

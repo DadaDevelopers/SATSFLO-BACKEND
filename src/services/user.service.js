@@ -17,7 +17,7 @@ class UserService {
    */
   async getProfile(userId) {
     const result = await pool.query(
-      `SELECT id, email, name, date_of_birth, avatar_url, timezone, language,
+      `SELECT id, email, name, phone, date_of_birth, avatar_url, timezone, language,
               role, email_verified, created_at, last_login
        FROM users WHERE id = $1`,
       [userId]
@@ -37,7 +37,7 @@ class UserService {
    * Update user profile
    */
   async updateProfile(userId, updates) {
-    const allowedFields = ['name', 'date_of_birth', 'avatar_url', 'timezone', 'language'];
+    const allowedFields = ['name', 'phone', 'date_of_birth', 'avatar_url', 'timezone', 'language'];
     const setClauses = [];
     const values = [];
 
@@ -57,7 +57,7 @@ class UserService {
 
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${values.length}
-       RETURNING id, email, name, date_of_birth, avatar_url, timezone, language`,
+       RETURNING id, email, name, phone, date_of_birth, avatar_url, timezone, language`,
       values
     );
 

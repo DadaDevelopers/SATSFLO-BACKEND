@@ -1,30 +1,116 @@
 'use strict';
 
 const axios = require('axios');
+const { bech32 } = require('bech32');
 const { pool } = require('../config/database');
-const logger = require('../utils/logger');
+
+// ─── Format validators ───────────────────────────────────────────────────────
+
+const LN_ADDRESS_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/;
+const LNURL_RE      = /^lnurl[a-z0-9]+$/i;
+
+function err(msg, code = 400) {
+  return Object.assign(new Error(msg), { statusCode: code });
+}
 
 class PaymentService {
+
+  // ─── Address resolution ────────────────────────────────────────────────────
+
   /**
-   * Resolve a lightning address to a BOLT11 invoice via LNURL-pay.
-   * lightningAddress: "user@domain.com"
-   * amountSats: number
+   * Detect input type and return the LNURL-pay metadata URL.
+   * Accepts: "user@domain.com" or "LNURL1..." bech32.
    */
-  async fetchInvoiceFromLightningAddress(lightningAddress, amountSats, comment = '') {
-    const [username, domain] = lightningAddress.split('@');
-    if (!username || !domain) throw Object.assign(new Error('Invalid lightning address'), { statusCode: 400 });
+  _resolveLnurlPayUrl(input) {
+    const trimmed = input.trim();
 
-    const lnurlPayUrl = `https://${domain}/.well-known/lnurlp/${username}`;
-    const metaRes = await axios.get(lnurlPayUrl, { timeout: 10000 });
+    // Lightning address  e.g. alice@getalby.com
+    if (LN_ADDRESS_RE.test(trimmed)) {
+      const [username, domain] = trimmed.split('@');
+      return `https://${domain}/.well-known/lnurlp/${username}`;
+    }
+
+    // LNURL bech32  e.g. LNURL1DP68GURN8...
+    if (LNURL_RE.test(trimmed)) {
+      try {
+        const { words } = bech32.decode(trimmed.toLowerCase(), 2000);
+        const bytes = bech32.fromWords(words);
+        const url = Buffer.from(bytes).toString('utf8');
+        return url;
+      } catch {
+        throw err('Invalid LNURL encoding');
+      }
+    }
+
+    throw err('Enter a lightning address (user@domain.com) or an LNURL code');
+  }
+
+  /**
+   * Fetch LNURL-pay metadata from a lightning address or LNURL.
+   * Returns the raw metadata object { tag, callback, minSendable, maxSendable, ... }
+   */
+  async _fetchPayMetadata(lightningTarget) {
+    const metaUrl = this._resolveLnurlPayUrl(lightningTarget);
+    let metaRes;
+    try {
+      metaRes = await axios.get(metaUrl, { timeout: 10000 });
+    } catch (e) {
+      throw err(`Could not reach lightning address: ${e.message}`, 502);
+    }
+
     const meta = metaRes.data;
+    if (meta.tag !== 'payRequest') throw err('Not a valid LNURL-pay endpoint');
+    if (!meta.callback)           throw err('LNURL-pay response missing callback');
 
-    if (meta.tag !== 'payRequest') throw Object.assign(new Error('Not a valid LNURL-pay endpoint'), { statusCode: 400 });
+    return meta;
+  }
+
+  // ─── Validate address (Step 1 — before amount entry) ──────────────────────
+
+  /**
+   * Validate a lightning address or LNURL and return payment limits.
+   * Used by the frontend before showing the amount input.
+   */
+  async validateAddress(input) {
+    const trimmed = (input || '').trim();
+    if (!trimmed) throw err('lightning_address or lnurl is required');
+
+    if (!LN_ADDRESS_RE.test(trimmed) && !LNURL_RE.test(trimmed)) {
+      throw err('Enter a lightning address (user@domain.com) or an LNURL code');
+    }
+
+    const meta = await this._fetchPayMetadata(trimmed);
+
+    // Try to extract a display description from metadata JSON
+    let description = '';
+    try {
+      const parsed = JSON.parse(meta.metadata || '[]');
+      const textEntry = parsed.find(([type]) => type === 'text/plain');
+      if (textEntry) description = textEntry[1];
+    } catch { /* metadata may not be JSON */ }
+
+    return {
+      valid: true,
+      min_sats: Math.ceil(meta.minSendable / 1000),
+      max_sats: Math.floor(meta.maxSendable / 1000),
+      comment_allowed: meta.commentAllowed || 0,
+      description,
+    };
+  }
+
+  // ─── Fetch invoice ─────────────────────────────────────────────────────────
+
+  /**
+   * Resolve a lightning target to a BOLT11 invoice.
+   * lightningTarget: "user@domain.com" OR "LNURL1..."
+   */
+  async fetchInvoice(lightningTarget, amountSats, comment = '') {
+    const meta = await this._fetchPayMetadata(lightningTarget);
 
     const amountMsats = amountSats * 1000;
     if (amountMsats < meta.minSendable || amountMsats > meta.maxSendable) {
-      throw Object.assign(
-        new Error(`Amount must be between ${meta.minSendable / 1000} and ${meta.maxSendable / 1000} sats`),
-        { statusCode: 400 }
+      throw err(
+        `Amount must be between ${Math.ceil(meta.minSendable / 1000)} and ${Math.floor(meta.maxSendable / 1000)} sats`
       );
     }
 
@@ -34,43 +120,61 @@ class PaymentService {
       callbackUrl.searchParams.set('comment', comment.slice(0, meta.commentAllowed));
     }
 
-    const invoiceRes = await axios.get(callbackUrl.toString(), { timeout: 10000 });
-    const { pr: bolt11Invoice, routes } = invoiceRes.data;
+    let invoiceRes;
+    try {
+      invoiceRes = await axios.get(callbackUrl.toString(), { timeout: 10000 });
+    } catch (e) {
+      throw err(`Failed to fetch invoice: ${e.message}`, 502);
+    }
 
-    if (!bolt11Invoice) throw Object.assign(new Error('Failed to fetch invoice from lightning address'), { statusCode: 502 });
+    const bolt11Invoice = invoiceRes.data.pr;
+    if (!bolt11Invoice) throw err('Lightning address returned no invoice', 502);
 
-    // Extract payment hash from invoice (last 64 hex chars before checksum for bech32)
-    // Simple approach: use the payment_hash from the response if available, else derive
+    // Prefer payment_hash from response; fall back to last 64 chars of invoice
     const paymentHash = invoiceRes.data.payment_hash || bolt11Invoice.slice(-64);
 
     return { bolt11Invoice, paymentHash };
   }
 
+  // ─── Create tip ────────────────────────────────────────────────────────────
+
   /**
    * Create a tip transaction.
+   * Accepts either recipient_id (SatsFlo user) OR lightning_address/lnurl directly.
    */
-  async createTip({ senderId, recipientId, amountSats, threadId, note }) {
-    // Get recipient's lightning address
-    const userResult = await pool.query(
-      'SELECT id, name, lightning_address FROM users WHERE id = $1',
-      [recipientId]
-    );
-    const recipient = userResult.rows[0];
-    if (!recipient) throw Object.assign(new Error('Recipient not found'), { statusCode: 404 });
-    if (!recipient.lightning_address) throw Object.assign(new Error('Recipient has not set a lightning address'), { statusCode: 422 });
+  async createTip({ senderId, recipientId, lightningAddress, amountSats, threadId, note }) {
+    let resolvedAddress = lightningAddress;
+    let resolvedRecipientId = recipientId || null;
 
-    const { bolt11Invoice, paymentHash } = await this.fetchInvoiceFromLightningAddress(
-      recipient.lightning_address, amountSats, note || ''
-    );
+    if (recipientId) {
+      // SatsFlo user — look up their lightning address
+      const userResult = await pool.query(
+        'SELECT id, name, lightning_address FROM users WHERE id = $1',
+        [recipientId]
+      );
+      const recipient = userResult.rows[0];
+      if (!recipient) throw err('Recipient not found', 404);
+      if (!recipient.lightning_address) throw err('Recipient has not set a lightning address', 422);
+      resolvedAddress = recipient.lightning_address;
+    } else if (lightningAddress) {
+      // External address — no SatsFlo user record required
+      if (!LN_ADDRESS_RE.test(lightningAddress) && !LNURL_RE.test(lightningAddress)) {
+        throw err('Invalid lightning address or LNURL');
+      }
+    } else {
+      throw err('recipient_id or lightning_address is required');
+    }
 
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const { bolt11Invoice, paymentHash } = await this.fetchInvoice(resolvedAddress, amountSats, note || '');
+
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     const result = await pool.query(
       `INSERT INTO gift_transactions
          (sender_id, receiver_id, amount_sats, thread_id, note, bolt11_invoice, payment_hash, expires_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
        RETURNING id, amount_sats, status, created_at, payment_hash, expires_at`,
-      [senderId, recipientId, amountSats, threadId || null, note || null, bolt11Invoice, paymentHash, expiresAt]
+      [senderId, resolvedRecipientId, amountSats, threadId || null, note || null, bolt11Invoice, paymentHash, expiresAt]
     );
 
     const tx = result.rows[0];
@@ -109,7 +213,26 @@ class PaymentService {
   }
 
   /**
-   * Mark a transaction as completed (called by webhook).
+   * Mark a transaction as completed by the sender (frontend confirm after paying).
+   * Scoped to sender_id so users can only confirm their own outgoing payments.
+   */
+  async confirmBySender(senderId, paymentHash) {
+    const result = await pool.query(
+      `UPDATE gift_transactions SET status = 'completed'
+       WHERE payment_hash = $1 AND sender_id = $2 AND status = 'pending'
+       RETURNING id, payment_hash, amount_sats, status`,
+      [paymentHash, senderId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Transaction not found or already settled');
+      err.statusCode = 404;
+      throw err;
+    }
+    return result.rows[0];
+  }
+
+  /**
+   * Mark a transaction as completed (called by webhook — no sender scope).
    */
   async confirmPayment(paymentHash) {
     const result = await pool.query(
