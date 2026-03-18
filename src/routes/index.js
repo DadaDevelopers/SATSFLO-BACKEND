@@ -18,6 +18,10 @@ const journalRoutes      = require('./journal.routes');
 const communityRoutes    = require('./community.routes');
 const paymentRoutes      = require('./payment.routes');
 const lightningRoutes    = require('./lightning.routes');
+const walletRoutes       = require('./wallet.routes');
+const partnerRoutes      = require('./partner.routes');
+const chatRoutes         = require('./chat.routes');
+const groupRoutes        = require('./group.routes');
 const ApiResponse = require('../utils/response');
 
 const API_VERSION = process.env.API_VERSION || 'v1';
@@ -58,6 +62,10 @@ router.get('/', (req, res) => {
       journal: `${API_BASE_PATH}/journal`,
       payments: `${API_BASE_PATH}/payments`,
       lightning: `${API_BASE_PATH}/lightning`,
+      wallet: `${API_BASE_PATH}/wallet`,
+      partner: `${API_BASE_PATH}/partner`,
+      chats: `${API_BASE_PATH}/chats`,
+      groups: `${API_BASE_PATH}/groups`,
       threads: `${API_BASE_PATH}/threads`,
       notifications: `${API_BASE_PATH}/notifications`,
     }
@@ -75,6 +83,10 @@ router.use('/water-settings', waterSettingsRoutes);
 router.use('/journal',        journalRoutes);
 router.use('/payments',       paymentRoutes);
 router.use('/lightning',      lightningRoutes);
+router.use('/wallet',         walletRoutes);
+router.use('/partner',        partnerRoutes);
+router.use('/chats',          chatRoutes);
+router.use('/groups',         groupRoutes);
 router.use('/',               communityRoutes);   // /threads, /notifications
 
 module.exports = router;
