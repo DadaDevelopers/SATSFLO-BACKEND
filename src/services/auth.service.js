@@ -63,7 +63,7 @@ class AuthService {
       [user.id]
     );
 
-    await emailService.sendVerificationEmail(email, verificationToken, name);
+    await emailService.sendOTPEmail(email, name, verificationToken);
 
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
@@ -275,7 +275,7 @@ class AuthService {
       [verificationToken, verificationExpires, verificationToken, emailOtpExpires, user.id]
     );
 
-    await emailService.sendVerificationEmail(user.email, verificationToken, user.name);
+    await emailService.sendOTPEmail(user.email, user.name, verificationToken);
 
     return { message: 'Verification email sent' };
   }
@@ -331,7 +331,7 @@ class AuthService {
       [user.id, resetToken, resetExpires]
     );
 
-    await emailService.sendPasswordResetEmail(user.email, resetToken, user.name);
+    await emailService.sendPasswordResetEmail(user.email, user.name, resetToken);
 
     logger.info('Password reset requested', { userId: user.id });
     return response;
