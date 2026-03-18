@@ -7,6 +7,10 @@
 const rateLimit = require('express-rate-limit');
 const ApiResponse = require('../utils/response');
 
+const API_VERSION = process.env.API_VERSION || 'v1';
+const API_HEALTH_PATH = `/${API_VERSION}/health`;
+const API_HEALTH_ORIGINAL_PATH = `/api/${API_VERSION}/health`;
+
 /**
  * General API rate limiter
  * Applied to all routes
@@ -22,7 +26,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/v1/health';
+    return req.path === '/health' || req.path === API_HEALTH_PATH || req.originalUrl === API_HEALTH_ORIGINAL_PATH;
   }
 });
 

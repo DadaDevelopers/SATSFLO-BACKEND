@@ -17,7 +17,10 @@ const dbConfig = {
     PREDICTIONS: 'predictions',
     REFRESH_TOKENS: 'refresh_tokens',
     PASSWORD_RESETS: 'password_resets',
-    // Reserved for Isabellah (Lightning/Chat features)
+    LIGHTNING_WALLETS: 'lightning_wallets',
+    LIGHTNING_TRANSACTIONS: 'lightning_transactions',
+    REWARD_LEDGER: 'reward_ledger',
+    GIFT_TRANSACTIONS: 'gift_transactions',
     WALLETS: 'wallets',
     REWARDS: 'rewards',
     MESSAGES: 'messages',
