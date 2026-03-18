@@ -1,1627 +1,440 @@
-# Satsflow API Documentation
+# Satsflow API Reference
 
-Complete API reference for the Satsflow mobile application backend.
+**Base URL** `http://localhost:3000/api/v1`
+**Production** set via `EXPO_PUBLIC_API_URL` env var
+**Content-Type** `application/json`
 
-**Base URL**: `http://localhost:3000/api/v1`
+All protected endpoints require:
+```
+Authorization: Bearer <accessToken>
+```
+Access tokens expire in `15m`. Refresh with `POST /auth/refresh`. Refresh tokens rotate on every use.
 
-**Content-Type**: `application/json`
+**Response envelope** (all endpoints):
+```
+{ "success": true, "message": "...", "data": { ... } }
+{ "success": false, "message": "...", "errors": [{ "field": "", "message": "" }] }
+```
 
 ---
 
 ## Table of Contents
 
-1. [Authentication](#authentication)
-2. [User Management](#user-management)
-3. [Cycle Profile](#cycle-profile)
-4. [Cycle Tracking](#cycle-tracking)
-5. [Day Logs](#day-logs)
-6. [Health (Symptoms & Moods)](#health-symptoms--moods)
-7. [Journal](#journal)
-8. [Water Settings](#water-settings)
-9. [Community](#community)
-10. [Constants & Enums](#constants--enums)
-11. [Error Codes](#error-codes)
-12. [Rate Limits](#rate-limits)
+1. [Authentication](#1-authentication)
+2. [Users](#2-users)
+3. [Cycle Profile](#3-cycle-profile)
+4. [Cycles](#4-cycles)
+5. [Day Logs](#5-day-logs)
+6. [Health — Symptoms](#6-health--symptoms)
+7. [Health — Moods](#7-health--moods)
+8. [Health — Analytics & Summaries](#8-health--analytics--summaries)
+9. [Journal](#9-journal)
+10. [Water Settings](#10-water-settings)
+11. [Wallet](#11-wallet)
+12. [Partner System](#12-partner-system)
+13. [Chats (DMs)](#13-chats-dms)
+14. [Groups](#14-groups)
+15. [Community — Threads](#15-community--threads)
+16. [Community — Notifications](#16-community--notifications)
+17. [Payments](#17-payments)
+18. [Enums & Constants](#18-enums--constants)
+19. [Error Codes](#19-error-codes)
+20. [Rate Limits](#20-rate-limits)
 
 ---
 
-## Authentication
+## 1. Authentication
 
-All protected endpoints require the `Authorization` header:
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/auth/register` | — | Create account. Sends OTP to email. Body: `email, password, name, dateOfBirth?` |
+| `POST` | `/auth/login` | — | Login. Body: `email, password` |
+| `POST` | `/auth/refresh` | — | Swap refresh token for new pair. Body: `refreshToken` |
+| `POST` | `/auth/logout` | ✓ | Revoke current device refresh token. Body: `refreshToken` |
+| `POST` | `/auth/logout-all` | ✓ | Revoke all refresh tokens for this user |
+| `POST` | `/auth/verify-otp` | — | Verify email with 6-digit OTP. Body: `email, otp` |
+| `GET`  | `/auth/verify-email?token=` | — | Verify email via link (query param) |
+| `GET`  | `/auth/verify-email/:token` | — | Verify email via link (path param) |
+| `POST` | `/auth/resend-verification` | — | Resend OTP. Body: `email` |
+| `POST` | `/auth/forgot-password` | — | Request reset email. Body: `email` |
+| `POST` | `/auth/reset-password/:token` | — | Reset password. Body: `password`. Token from email link. |
+| `PUT`  | `/auth/change-password` | ✓ | Change password. Body: `currentPassword, newPassword` |
+| `GET`  | `/auth/me` | ✓ | Returns `{ id, email, role }` for the authenticated user |
 
+**Auth response** (register & login):
 ```
-Authorization: Bearer <access_token>
+{ user: { id, email, name, role, emailVerified }, accessToken, refreshToken, expiresIn }
 ```
 
-Access tokens expire in `15m`. When expired, call `/auth/refresh` with the refresh token to get a new pair.
+**Deep-link flow for verify/reset:**
+Email contains `satsflo:///verify-email?token=` or `satsflo:///reset-password?token=`.
+App extracts token from URL → calls the respective endpoint.
 
 ---
 
-### Register
-
-Create a new user account. A verification email is sent automatically.
-
-```http
-POST /auth/register
-```
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123",
-  "confirmPassword": "SecurePass123",
-  "name": "Jane Doe",
-  "dateOfBirth": "1995-05-15",
-  "acceptTerms": "true"
-}
-```
-
-**Password Requirements:** 8+ chars, one uppercase, one lowercase, one number.
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Registration successful. Please verify your email.",
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "user@example.com",
-      "name": "Jane Doe",
-      "role": "user",
-      "emailVerified": false
-    },
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "eyJhbGci...",
-    "expiresIn": "15m"
-  },
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
-
----
-
-### Login
-
-```http
-POST /auth/login
-```
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "user@example.com",
-      "name": "Jane Doe",
-      "role": "user",
-      "emailVerified": true
-    },
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "eyJhbGci...",
-    "expiresIn": "15m"
-  }
-}
-```
-
----
-
-### Refresh Token
-
-Swap a refresh token for a new access + refresh pair. The old refresh token is revoked immediately.
-
-```http
-POST /auth/refresh
-```
-
-**Request Body:**
-```json
-{
-  "refreshToken": "eyJhbGci..."
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Token refreshed",
-  "data": {
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "eyJhbGci...",
-    "expiresIn": "15m"
-  }
-}
-```
-
----
-
-### Logout
-
-Revoke the current refresh token (single device).
-
-```http
-POST /auth/logout
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "refreshToken": "eyJhbGci..."
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Logged out successfully",
-  "data": null
-}
-```
-
----
-
-### Logout All Devices
-
-Revoke every refresh token for the authenticated user.
-
-```http
-POST /auth/logout-all
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Logged out from all devices",
-  "data": null
-}
-```
-
----
-
-### Verify Email
-
-Confirm the user's email address using the token sent in the verification email.
-
-```http
-GET /auth/verify-email/:token
-```
-
-**URL Param:** `:token` — token from the verification email link.
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Email verified successfully"
-}
-```
-
----
-
-### Resend Verification Email
-
-```http
-POST /auth/resend-verification
-```
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "If an account exists, a verification email has been sent"
-}
-```
-
----
-
-### Forgot Password
-
-Request a password reset email. Always returns the same message to prevent email enumeration.
-
-```http
-POST /auth/forgot-password
-```
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "If an account exists, a password reset email has been sent"
-}
-```
-
----
-
-### Reset Password
-
-Reset password using the token from the reset email. Valid for 1 hour, single-use. All refresh tokens are revoked on success.
-
-```http
-POST /auth/reset-password/:token
-```
-
-**URL Param:** `:token` — token from the reset email link.
-
-**Request Body:**
-```json
-{
-  "password": "NewSecurePass123",
-  "confirmPassword": "NewSecurePass123"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Password reset successfully"
-}
-```
-
----
-
-### Change Password
-
-Change password for the currently authenticated user. All refresh tokens are revoked on success.
-
-```http
-PUT /auth/change-password
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "currentPassword": "OldPassword123",
-  "newPassword": "NewPassword456",
-  "confirmNewPassword": "NewPassword456"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Password changed successfully"
-}
-```
-
----
-
-### Get Current User
-
-```http
-GET /auth/me
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "role": "user"
-  }
-}
-```
-
----
-
-## User Management
-
-### Get Profile
-
-```http
-GET /users/profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "name": "Jane Doe",
-    "date_of_birth": "1995-05-15",
-    "avatar_url": null,
-    "timezone": "UTC",
-    "language": "en",
-    "role": "user",
-    "email_verified": true,
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "last_login": "2024-01-15T10:00:00.000Z"
-  }
-}
-```
-
----
-
-### Update Profile
-
-```http
-PUT /users/profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body (all fields optional):**
-```json
-{
-  "name": "Jane Smith",
-  "date_of_birth": "1995-05-15",
-  "timezone": "Africa/Nairobi",
-  "language": "en",
-  "avatar_url": "https://cdn.example.com/avatar.jpg"
-}
-```
-
----
-
-### Get Health Profile
-
-Returns decrypted health information.
-
-```http
-GET /users/health-profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "average_cycle_length": 28,
-    "average_period_length": 5,
-    "birth_control_method": "none",
-    "health_conditions": ["endometriosis"],
-    "medications": [],
-    "last_period_date": "2024-01-01",
-    "is_pregnant": false,
-    "is_trying_to_conceive": false
-  }
-}
-```
-
-> `health_conditions`, `medications`, and `notes` are encrypted at rest and decrypted before returning.
-
----
-
-### Update Health Profile
-
-```http
-PUT /users/health-profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body (all fields optional):**
-```json
-{
-  "averageCycleLength": 30,
-  "averagePeriodLength": 6,
-  "birthControlMethod": "pill",
-  "healthConditions": ["pcos"],
-  "medications": ["metformin"],
-  "lastPeriodDate": "2024-01-10",
-  "isPregnant": false,
-  "isTryingToConceive": true
-}
-```
-
----
-
-### Get Preferences
-
-```http
-GET /users/preferences
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "notifications": {
-      "periodReminder": true,
-      "ovulationReminder": true,
-      "pillReminder": false,
-      "dailyLogReminder": false,
-      "communityUpdates": true
-    },
-    "reminderTime": "09:00",
-    "privacy": "private",
-    "theme": "system",
-    "units": "metric"
-  }
-}
-```
-
----
-
-### Update Preferences
-
-```http
-PUT /users/preferences
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body (all fields optional, merged with existing):**
-```json
-{
-  "notifications": {
-    "periodReminder": true,
-    "dailyLogReminder": true
-  },
-  "reminderTime": "20:00",
-  "privacy": "friends",
-  "theme": "dark"
-}
-```
-
----
-
-### Export User Data
-
-GDPR-compliant full data export (user, health profile, cycles, symptoms, moods).
-
-```http
-GET /users/export
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
----
-
-### Delete Account
-
-Soft-deletes the account. Requires password confirmation.
-
-```http
-DELETE /users/account
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "password": "YourPassword123",
-  "confirmation": "DELETE"
-}
-```
-
----
-
-## Cycle Profile
-
-Lightweight cycle setup used by the home-screen widget. Separate from the full Cycle Tracking module.
-
-### Create / Update Cycle Profile
-
-```http
-POST /cycle-profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "cycle_length": 28,
-  "period_length": 5,
-  "last_period_start": "2024-01-15"
-}
-```
-
-| Field | Type | Required | Constraints |
-|-------|------|----------|-------------|
-| `last_period_start` | string (YYYY-MM-DD) | Yes | — |
-| `cycle_length` | integer | No | 21–35 (default: 28) |
-| `period_length` | integer | No | 3–9 (default: 5) |
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Cycle profile saved",
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "cycle_length": 28,
-    "period_length": 5,
-    "last_period_start": "2024-01-15",
-    "created_at": "2024-01-15T00:00:00.000Z"
-  }
-}
-```
-
----
-
-### Get Cycle Profile
-
-Returns the stored profile plus live calculations.
-
-```http
-GET /cycle-profile
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Cycle profile retrieved",
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "cycle_length": 28,
-    "period_length": 5,
-    "last_period_start": "2024-01-15",
-    "current_day": 12,
-    "days_until_period": 17,
-    "current_phase": "follicular"
-  }
-}
-```
-
-**Phases:** `menstrual` · `follicular` · `ovulation` · `luteal`
-
-**Response (404):** Returned when no profile exists yet.
-
----
-
-## Cycle Tracking
+## 2. Users
 
 All endpoints require `Authorization: Bearer <token>`.
 
-### Start Period
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/users/profile` | Get profile: `id, email, name, phone, avatar_url, date_of_birth, timezone, role, email_verified` |
+| `PUT`  | `/users/profile` | Update profile. Fields: `name, phone, date_of_birth, timezone, avatar_url, language` |
+| `GET`  | `/users/health-profile` | Get health profile (decrypted) |
+| `PUT`  | `/users/health-profile` | Update health profile. Fields: `blood_type, height_cm, weight_kg, health_conditions, medications, notes` |
+| `GET`  | `/users/preferences` | Get notification & UI preferences |
+| `PUT`  | `/users/preferences` | Update preferences. Fields: `notifications_enabled, reminder_time, theme, language` |
+| `GET`  | `/users/export` | Full GDPR data export (user + all health records) |
+| `DELETE` | `/users/account` | Delete account. Body: `password` (required confirmation) |
 
-```http
-POST /cycles/start
-```
-
-**Request Body:**
-```json
-{
-  "date": "2024-01-15",
-  "flowIntensity": "medium",
-  "notes": "Started this morning"
-}
-```
-
-**Flow Intensity:** `spotting` · `light` · `medium` · `heavy`
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Period started",
-  "data": {
-    "id": "uuid",
-    "startDate": "2024-01-15",
-    "endDate": null,
-    "periodEndDate": null,
-    "periodLength": null,
-    "cycleLength": null,
-    "notes": "Started this morning",
-    "createdAt": "2024-01-15T10:00:00.000Z"
-  }
-}
-```
+> `health_conditions`, `medications`, `notes` are AES-256-GCM encrypted at rest. Returned decrypted.
 
 ---
 
-### End Period
+## 3. Cycle Profile
 
-```http
-POST /cycles/end
-```
+Lightweight widget data. Separate from the full cycle tracking module.
+All endpoints require `Authorization: Bearer <token>`.
 
-**Request Body:**
-```json
-{
-  "date": "2024-01-20"
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/cycle-profile` | Create or replace profile. Body: `cycle_length, period_length, last_period_start, luteal_phase_length?, ignore_irregular_cycle?` |
+| `PUT`  | `/cycle-profile` | Partial update. All fields optional: `cycle_length?, period_length?, last_period_start?, luteal_phase_length?, ignore_irregular_cycle?` |
+| `GET`  | `/cycle-profile` | Get profile + live calculations: `current_day, days_until_period, current_phase` |
 
-**Response (200):** Returns the updated cycle with `periodEndDate` and `periodLength` set.
+**Constraints:** `cycle_length` 21–35 · `period_length` 3–9 · `luteal_phase_length` 7–21
 
 ---
 
-### Log Daily Entry
-
-```http
-POST /cycles/log
-```
-
-**Request Body (all fields except `date` optional):**
-```json
-{
-  "date": "2024-01-16",
-  "flowIntensity": "heavy",
-  "temperature": 36.5,
-  "cervicalMucus": "creamy",
-  "sexualActivity": false,
-  "contraceptionUsed": false,
-  "notes": "Cramps in the morning"
-}
-```
-
-**Cervical Mucus:** `dry` · `sticky` · `creamy` · `watery` · `egg_white`
-
-If an entry already exists for the date it is updated; otherwise a new one is created.
-
----
-
-### Get Current Cycle
-
-```http
-GET /cycles/current
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "startDate": "2024-01-15",
-    "dayOfCycle": 5,
-    "phase": {
-      "name": "menstrual",
-      "day": 5,
-      "description": "Menstrual phase - Period days"
-    },
-    "predictions": {
-      "nextPeriod": { "date": "2024-02-12", "daysUntil": 23 },
-      "ovulation":  { "date": "2024-01-29", "daysUntil": 9 },
-      "fertileWindow": { "start": "2024-01-24", "end": "2024-01-30" }
-    }
-  }
-}
-```
-
----
-
-### Get Predictions
-
-```http
-GET /cycles/predictions
-```
-
-Returns the same prediction object as the current cycle endpoint.
-
----
-
-### Get Cycle History
-
-```http
-GET /cycles?page=1&limit=20&startDate=2024-01-01&endDate=2024-12-31
-```
-
-**Query Parameters (all optional):**
-
-| Param | Description |
-|-------|-------------|
-| `page` | Page number (default: 1) |
-| `limit` | Results per page (default: 20) |
-| `startDate` | Filter cycles starting on or after this date |
-| `endDate` | Filter cycles starting on or before this date |
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "cycles": [...],
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 6
-    }
-  }
-}
-```
-
----
-
-### Get Cycle Analytics
-
-```http
-GET /cycles/analytics?startDate=2024-01-01&endDate=2024-06-30
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "totalCycles": 6,
-    "averageCycleLength": 28,
-    "averagePeriodLength": 5,
-    "shortestCycle": 26,
-    "longestCycle": 32,
-    "cycleVariability": 2.1,
-    "cycles": [...]
-  }
-}
-```
-
----
-
-### Get Daily Log
-
-```http
-GET /cycles/log/:date
-```
-
-**URL Param:** `:date` — date in `YYYY-MM-DD` format.
-
-Returns `null` if no entry exists for that date.
-
----
-
-### Get / Update / Delete Cycle by ID
-
-```http
-GET    /cycles/:id
-PUT    /cycles/:id
-DELETE /cycles/:id
-```
-
----
-
-## Day Logs
-
-A flexible daily log — one entry per date — that consolidates period status, symptoms, moods, vitals, and notes. All endpoints require authentication.
-
-### Get Day Log
-
-```http
-GET /logs?date=YYYY-MM-DD
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Day log retrieved",
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "log_date": "2024-01-15",
-    "period_start": true,
-    "period_end": false,
-    "flow_level": "medium",
-    "symptoms": ["cramps", "bloating"],
-    "moods": ["tired"],
-    "medicine": ["ibuprofen"],
-    "note": "Felt tired all day",
-    "weight": 62.5,
-    "temperature": 36.7,
-    "water_intake": 1800,
-    "created_at": "2024-01-15T08:00:00.000Z"
-  }
-}
-```
-
-Returns `null` data when no log exists for the date.
-
----
-
-### Upsert Day Log
-
-Create or update the log for a specific date. Send only the fields you want to set.
-
-```http
-PUT /logs/:date
-```
-
-**URL Param:** `:date` — date in `YYYY-MM-DD` format.
-
-**Request Body (all fields optional):**
-```json
-{
-  "period_start": true,
-  "period_end": false,
-  "flow_level": "medium",
-  "symptoms": ["cramps", "bloating"],
-  "moods": ["tired", "emotional"],
-  "medicine": ["ibuprofen"],
-  "note": "Felt tired all day",
-  "weight": 62.5,
-  "temperature": 36.7,
-  "water_intake": 1800
-}
-```
-
-**Response (200):** Returns the full saved log object.
-
----
-
-### Get Day Logs Range
-
-```http
-GET /logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD
-```
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `from` | Yes | Start date (inclusive) |
-| `to` | Yes | End date (inclusive) |
-
-**Response (200):** Array of log objects ordered by date ascending.
-
----
-
-## Health (Symptoms & Moods)
+## 4. Cycles
 
 All endpoints require `Authorization: Bearer <token>`.
 
-### Log Symptom
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/cycles/start` | Start a period. Body: `date, flowIntensity?, notes?` |
+| `POST` | `/cycles/end` | End current period. Body: `date` |
+| `POST` | `/cycles/log` | Log a daily entry (no cycle ID needed). Body: `date, flowIntensity?, temperature?, cervicalMucus?, notes?` |
+| `POST` | `/cycles/:cycleId/logs` | Log a daily entry scoped to a specific cycle |
+| `GET`  | `/cycles/current` | Current cycle + phase + predictions (next period, ovulation, fertile window) |
+| `GET`  | `/cycles/predictions` | Predictions only (next period, ovulation, fertile window) |
+| `GET`  | `/cycles/analytics` | Analytics: avg cycle length, avg period length, shortest/longest. Query: `startDate?, endDate?` |
+| `GET`  | `/cycles/log/:date` | Get daily log for a specific date (`YYYY-MM-DD`) |
+| `GET`  | `/cycles` | Cycle history. Query: `page?, limit?, startDate?, endDate?` |
+| `GET`  | `/cycles/:cycleId` | Get a single cycle by ID |
+| `PUT`  | `/cycles/:cycleId` | Update a cycle. Fields: `flowIntensity?, notes?, startDate?, endDate?` |
+| `DELETE` | `/cycles/:cycleId` | Delete a cycle |
 
-```http
-POST /health/symptoms
-```
+**Flow intensity:** `spotting` · `light` · `medium` · `heavy`
+**Cervical mucus:** `dry` · `sticky` · `creamy` · `watery` · `egg_white`
 
-**Request Body:**
-```json
-{
-  "date": "2024-01-15",
-  "symptom": "cramps",
-  "category": "pain",
-  "severity": 2,
-  "timeOfDay": "morning",
-  "notes": "Took ibuprofen"
-}
-```
+---
+
+## 5. Day Logs
+
+One log per day — consolidates vitals, water, period markers, notes.
+All endpoints require `Authorization: Bearer <token>`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/logs?date=YYYY-MM-DD` | Get log for a date. Returns `null` if none exists. |
+| `GET`  | `/logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD` | Get all logs in a date range |
+| `PUT`  | `/logs/:date` | Upsert log for `:date`. Safe to call multiple times. |
+
+**Upsert fields (all optional):** `period_start, period_end, flow_level, symptoms[], moods[], medicine[], note, weight, temperature, water_intake`
+
+---
+
+## 6. Health — Symptoms
+
+All endpoints require `Authorization: Bearer <token>`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/health/symptoms` | Log one symptom. Body: `date, symptom, category, severity, timeOfDay?, notes?` |
+| `POST` | `/health/symptoms/batch` | Log multiple symptoms. Body: `date, symptoms: [{ symptom, category, severity }]` |
+| `GET`  | `/health/symptoms` | List symptoms. Query: `startDate?, endDate?, category?, page?, limit?` |
+| `GET`  | `/health/symptoms/date/:date` | All symptoms for a specific date |
+| `PUT`  | `/health/symptoms/:id` | Update a symptom. Fields: `severity?, notes?` |
+| `DELETE` | `/health/symptoms/:id` | Delete a symptom |
 
 **Categories:** `physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep`
-
-**Severity:** `1` (mild) · `2` (moderate) · `3` (severe) · up to `5`
-
-**Time of Day:** `morning` · `afternoon` · `evening` · `night`
+**Severity:** `1` (mild) → `5` (severe)
 
 ---
 
-### Log Multiple Symptoms
+## 7. Health — Moods
 
-```http
-POST /health/symptoms/batch
-```
+All endpoints require `Authorization: Bearer <token>`.
 
-**Request Body:**
-```json
-{
-  "date": "2024-01-15",
-  "symptoms": [
-    { "symptom": "cramps",   "category": "pain",     "severity": 2 },
-    { "symptom": "bloating", "category": "physical", "severity": 1 },
-    { "symptom": "headache", "category": "pain",     "severity": 2 }
-  ]
-}
-```
-
----
-
-### Get Symptoms
-
-```http
-GET /health/symptoms?page=1&limit=20&startDate=2024-01-01&endDate=2024-03-31&category=pain
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "symptoms": [...],
-    "pagination": { "page": 1, "limit": 20, "total": 45 }
-  }
-}
-```
-
----
-
-### Get Symptoms by Date
-
-```http
-GET /health/symptoms/date/2024-01-15
-```
-
----
-
-### Update / Delete Symptom
-
-```http
-PUT    /health/symptoms/:id
-DELETE /health/symptoms/:id
-```
-
----
-
-### Log Mood
-
-```http
-POST /health/moods
-```
-
-**Request Body:**
-```json
-{
-  "date": "2024-01-15",
-  "mood": "happy",
-  "intensity": 4,
-  "notes": "Great day!",
-  "triggers": ["good sleep", "exercise"]
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/health/moods` | Log one mood. Body: `date, mood, intensity, notes?, triggers?[]` |
+| `POST` | `/health/moods/batch` | Log multiple moods. Body: `date, moods: [{ mood, intensity }]` |
+| `GET`  | `/health/moods` | List moods. Query: `startDate?, endDate?, mood?, page?, limit?` |
+| `GET`  | `/health/moods/date/:date` | All moods for a specific date |
+| `PUT`  | `/health/moods/:id` | Update a mood. Fields: `intensity?, notes?` |
+| `DELETE` | `/health/moods/:id` | Delete a mood |
 
 **Moods:** `happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident`
-
-**Intensity:** `1` (very low) to `5` (very high)
-
----
-
-### Log Multiple Moods
-
-```http
-POST /health/moods/batch
-```
-
-**Request Body:**
-```json
-{
-  "date": "2024-01-15",
-  "moods": [
-    { "mood": "energetic", "intensity": 4 },
-    { "mood": "happy",     "intensity": 3 }
-  ]
-}
-```
+**Intensity:** `1` (very low) → `5` (very high)
 
 ---
 
-### Get Moods
+## 8. Health — Analytics & Summaries
 
-```http
-GET /health/moods?page=1&limit=20&startDate=2024-01-01&mood=happy
-```
+All endpoints require `Authorization: Bearer <token>`.
 
----
-
-### Get Moods by Date
-
-```http
-GET /health/moods/date/2024-01-15
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/health/analytics/symptoms` | Top symptoms, category breakdown. Query: `startDate?, endDate?` |
+| `GET`  | `/health/analytics/moods` | Mood distribution, avg intensity. Query: `startDate?, endDate?` |
+| `GET`  | `/health/summary/:date` | Combined symptoms + moods for one date |
+| `GET`  | `/health/trends/:cycleId` | Symptom & mood data correlated by cycle day |
 
 ---
 
-### Update / Delete Mood
+## 9. Journal
 
-```http
-PUT    /health/moods/:id
-DELETE /health/moods/:id
-```
+Private diary entries.
+All endpoints require `Authorization: Bearer <token>`.
 
----
-
-### Get Symptom Analytics
-
-```http
-GET /health/analytics/symptoms?startDate=2024-01-01&endDate=2024-03-31
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "totalEntries": 45,
-    "topSymptoms": [
-      { "symptom": "cramps",   "count": 12, "avgSeverity": 2.1 },
-      { "symptom": "headache", "count": 8,  "avgSeverity": 1.8 }
-    ],
-    "categoryBreakdown": {
-      "pain": 20,
-      "physical": 15,
-      "emotional": 10
-    },
-    "dateRange": { "startDate": "2024-01-01", "endDate": "2024-03-31" }
-  }
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/journal?month=YYYY-MM` | All entries for a calendar month |
+| `POST` | `/journal` | Create entry. Body: `entry_date, content` |
+| `PUT`  | `/journal/:id` | Update entry. Body: `content` |
+| `DELETE` | `/journal/:id` | Delete entry |
 
 ---
 
-### Get Mood Analytics
+## 10. Water Settings
 
-```http
-GET /health/analytics/moods?startDate=2024-01-01&endDate=2024-03-31
-```
+Per-user water goal and cup configuration.
+All endpoints require `Authorization: Bearer <token>`.
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "totalEntries": 38,
-    "moodDistribution": [
-      { "mood": "happy", "count": 12, "percentage": 32, "avgIntensity": 3.8 },
-      { "mood": "tired", "count": 9,  "percentage": 24, "avgIntensity": 3.1 }
-    ],
-    "dateRange": { "startDate": "2024-01-01", "endDate": "2024-03-31" }
-  }
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/water-settings` | Get settings. Returns defaults if none set (`water_target: 2000 ml`) |
+| `PUT`  | `/water-settings` | Upsert settings. Fields: `water_target?, cup_capacity?, cup_style?` |
 
 ---
 
-### Get Daily Summary
+## 11. Wallet
 
-Combined symptoms and moods for one date.
+Connect Bitcoin Lightning wallet.
+All endpoints require `Authorization: Bearer <token>`.
 
-```http
-GET /health/summary/2024-01-15
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/wallet/lightning` | Get saved lightning address. Returns `{ lightning_address }` (null if not set) |
+| `PUT`  | `/wallet/lightning` | Save lightning address. Body: `{ lightning_address }`. Must be `user@domain.com` format |
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "date": "2024-01-15",
-    "symptoms": [...],
-    "moods": [...],
-    "hasSymptomsLogged": true,
-    "hasMoodsLogged": true
-  }
-}
-```
+> Setting a lightning address here makes the user tippable via `POST /payments/tip` with `recipient_id`.
+> It also persists on `GET /users/profile` as `lightning_address`.
 
 ---
 
-### Get Health Trends
+## 12. Partner System
 
-Symptom and mood data correlated by cycle day for a specific cycle.
+All endpoints require `Authorization: Bearer <token>`.
 
-```http
-GET /health/trends/:cycleId
-```
+**Invite flow (sender):**
 
----
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/partner/invite` | Generate 6-char invite code. Body: `share_period_dates?, share_fertile_window?, share_symptoms_moods?, share_cycle_insights?, share_sex_drive?`. Returns `{ invite_code, expires_at }`. Expires in 24 h. |
+| `GET`  | `/partner/invite/status` | Check if partner accepted. Returns `{ invite_code, status: pending\|accepted\|expired, partner? }` |
 
-## Journal
+**Accept flow (receiver):**
 
-Private diary entries. All endpoints require `Authorization: Bearer <token>`.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/partner/accept` | Enter code to connect. Body: `{ invite_code }`. Returns `{ partnership_id, partner: { id, name, avatar_url } }` |
 
-### Get Journal Entries
+**After pairing (both users):**
 
-Retrieve all entries for a calendar month.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/partner` | Get current partner info: `{ partner, my_nickname, partner_nickname, partner_mode_enabled, connected_since, my_sharing }` |
+| `DELETE` | `/partner` | Unpair with partner |
+| `PUT`    | `/partner/nickname` | Set nicknames. Body: `{ my_nickname, partner_nickname }` |
+| `GET`    | `/partner/settings` | Get your current sharing permissions |
+| `PUT`    | `/partner/settings` | Update what you share. Body: same sharing booleans as invite |
+| `PUT`    | `/partner/mode` | Toggle partner mode. Body: `{ partner_mode_enabled: boolean }` |
 
-```http
-GET /journal?month=YYYY-MM
-```
+**Partner cycle view:**
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Journal entries retrieved",
-  "data": [
-    {
-      "id": "uuid",
-      "user_id": "uuid",
-      "entry_date": "2024-01-15",
-      "content": "Feeling much better today.",
-      "created_at": "2024-01-15T20:00:00.000Z",
-      "updated_at": "2024-01-15T20:00:00.000Z"
-    }
-  ]
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/partner/cycle` | Partner's cycle data filtered by their sharing settings. Returns `{ cycle_day, cycle_phase, next_period_days, next_ovulation_days, pregnancy_chance, todays_symptoms?, moods?, sex_drive? }` |
+| `GET` | `/partner/calendar` | Partner's calendar dates. Returns `{ period_days?, fertility_window?, ovulation_day?, cycle_count }` — fields omitted if partner hasn't enabled sharing |
 
----
-
-### Create Journal Entry
-
-```http
-POST /journal
-```
-
-**Request Body:**
-```json
-{
-  "entry_date": "2024-01-15",
-  "content": "Feeling much better today."
-}
-```
-
-| Field | Type | Required |
-|-------|------|----------|
-| `entry_date` | string (YYYY-MM-DD) | Yes |
-| `content` | string (non-empty) | Yes |
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Journal entry created",
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "entry_date": "2024-01-15",
-    "content": "Feeling much better today.",
-    "created_at": "2024-01-15T20:00:00.000Z"
-  }
-}
-```
+**Business rules:**
+- One active partner at a time. Unpair to connect someone new.
+- Invite codes are 6 characters, uppercase alphanumeric, expire in 24 hours.
+- Sharing settings are per-user — each person controls what they share.
+- `share_symptoms_moods` gates `todays_symptoms` + `moods` in `/partner/cycle`.
+- `share_period_dates` gates `period_days` in `/partner/calendar`.
+- `share_fertile_window` gates `fertility_window` + `ovulation_day` in `/partner/calendar`.
 
 ---
 
-## Water Settings
+## 13. Chats (DMs)
 
-Per-user water intake goal and cup configuration. All endpoints require `Authorization: Bearer <token>`.
+Direct messages between two users.
+All endpoints require `Authorization: Bearer <token>`.
 
-### Get Water Settings
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/chats` | List all conversations. Returns `[{ conversation_id, other_user, last_message, last_message_time, unread_count, is_typing }]` |
+| `POST`   | `/chats` | Start a conversation. Body: `{ recipient_id }`. Idempotent — returns existing if already exists. |
+| `GET`    | `/chats/:conversationId` | Get messages. Query: `page?, limit?` (default 50, newest first) |
+| `POST`   | `/chats/:conversationId` | Send message. Body: `{ content }` |
+| `DELETE` | `/chats/:conversationId/:messageId` | Soft-delete own message |
+| `PUT`    | `/chats/:conversationId/read` | Mark all unread messages in conversation as read |
+| `POST`   | `/chats/:conversationId/typing` | Set typing state. Body: `{ is_typing: boolean }`. State expires after 5 s. |
 
-Returns saved settings, or defaults if none have been set.
-
-```http
-GET /water-settings
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Water settings retrieved",
-  "data": {
-    "user_id": "uuid",
-    "water_target": 2000,
-    "cup_capacity": 250,
-    "cup_style": "standard"
-  }
-}
-```
-
-**Defaults:** `water_target` = 2000 ml · `cup_capacity` = 250 ml · `cup_style` = `"standard"`
+> `is_typing` in the conversation list reflects the other user's active typing state (fresh within 5 seconds).
 
 ---
 
-### Update Water Settings
+## 14. Groups
 
-```http
-PUT /water-settings
-```
+Group chats with multiple participants.
+All endpoints require `Authorization: Bearer <token>`.
 
-**Request Body (all fields optional):**
-```json
-{
-  "water_target": 2500,
-  "cup_capacity": 300,
-  "cup_style": "large"
-}
-```
-
-| Field | Type | Constraints |
-|-------|------|-------------|
-| `water_target` | integer | > 0 (ml) |
-| `cup_capacity` | integer | > 0 (ml) |
-| `cup_style` | string | Free-form label |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/groups` | List groups you are a member of |
+| `POST`   | `/groups` | Create group. Body: `{ name, description?, member_ids?: [] }`. Creator becomes admin. |
+| `GET`    | `/groups/:groupId` | Group info + full member list with roles |
+| `PUT`    | `/groups/:groupId` | Update group. Body: `{ name?, description? }`. Admin only. |
+| `DELETE` | `/groups/:groupId` | Delete group. Admin only. |
+| `POST`   | `/groups/:groupId/members` | Add member. Body: `{ user_id }`. Admin only. |
+| `DELETE` | `/groups/:groupId/members/:userId` | Remove member. Admin only. |
+| `GET`    | `/groups/:groupId/messages` | Get messages. Query: `page?, limit?` (default 50, newest first) |
+| `POST`   | `/groups/:groupId/messages` | Send message. Body: `{ content }` |
+| `DELETE` | `/groups/:groupId/messages/:messageId` | Soft-delete message (own or admin) |
+| `POST`   | `/groups/:groupId/leave` | Leave group. Fails if you are the only admin. |
 
 ---
 
-## Community
+## 15. Community — Threads
 
-Public forum threads, comments, likes, and notifications.
+Read endpoints are public. Write endpoints require `Authorization: Bearer <token>`.
+Authenticated reads return personalised `is_liked_by_me`.
 
-### Get Threads
-
-Publicly readable. Authenticated users receive a personalised `is_liked_by_me` flag.
-
-```http
-GET /threads?tab=recent&search=cramps&page=1&limit=20
-```
-
-**Auth:** Optional (`Authorization: Bearer <token>`)
-
-| Param | Default | Description |
-|-------|---------|-------------|
-| `tab` | `recent` | `recent` or `popular` |
-| `search` | — | Content search string |
-| `page` | `1` | Page number |
-| `limit` | `20` | Results per page (max 50) |
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "threads": [
-      {
-        "id": "uuid",
-        "content": "Anyone else dealing with PCOS?",
-        "image_url": null,
-        "created_at": "2024-01-15T10:00:00.000Z",
-        "updated_at": "2024-01-15T10:00:00.000Z",
-        "user": {
-          "id": "uuid",
-          "name": "Jane Doe",
-          "avatar_url": null
-        },
-        "like_count": 12,
-        "comment_count": 4,
-        "is_liked_by_me": false
-      }
-    ],
-    "total": 42,
-    "page": 1,
-    "limit": 20
-  }
-}
-```
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET`  | `/threads` | Optional | List threads. Query: `tab=(recent\|popular), search?, page?, limit?` |
+| `POST` | `/threads` | ✓ | Create thread. Body: `content, image_url?` |
+| `GET`  | `/threads/:id` | Optional | Single thread with full comment list and `is_liked_by_me` |
+| `PUT`  | `/threads/:id` | ✓ | Update thread (own only). Body: `content?, image_url?` |
+| `DELETE` | `/threads/:id` | ✓ | Delete thread (own or admin) |
+| `GET`  | `/threads/:id/comments` | Optional | List comments for a thread |
+| `POST` | `/threads/:id/comments` | ✓ | Add comment. Body: `content` |
+| `PUT`  | `/threads/:id/comments/:commentId` | ✓ | Update comment (own only). Body: `content` |
+| `DELETE` | `/threads/:id/comments/:commentId` | ✓ | Delete comment (own or admin) |
+| `POST` | `/threads/:id/like` | ✓ | Like thread. Idempotent. Returns `{ like_count, is_liked_by_me: true }` |
+| `DELETE` | `/threads/:id/like` | ✓ | Unlike thread. Returns `{ like_count, is_liked_by_me: false }` |
 
 ---
 
-### Create Thread
+## 16. Community — Notifications
 
-```http
-POST /threads
-```
+All endpoints require `Authorization: Bearer <token>`.
 
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "content": "Anyone else dealing with PCOS?",
-  "image_url": "https://example.com/image.jpg"
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `content` | Yes | Non-empty string |
-| `image_url` | No | Optional image URL |
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Thread created",
-  "data": {
-    "id": "uuid",
-    "content": "Anyone else dealing with PCOS?",
-    "image_url": null,
-    "created_at": "2024-01-15T10:00:00.000Z",
-    "user": {
-      "id": "uuid",
-      "name": "Jane Doe",
-      "avatar_url": null
-    }
-  }
-}
-```
-
----
-
-### Get Comments
-
-```http
-GET /threads/:id/comments
-```
-
-**Auth:** Optional
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Comments retrieved",
-  "data": [
-    {
-      "id": "uuid",
-      "content": "Me too!",
-      "created_at": "2024-01-15T11:00:00.000Z",
-      "user": {
-        "id": "uuid",
-        "name": "Jane Doe",
-        "avatar_url": null
-      }
-    }
-  ]
-}
-```
-
----
-
-### Add Comment
-
-A notification is automatically sent to the thread author (unless they are the commenter).
-
-```http
-POST /threads/:id/comments
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Request Body:**
-```json
-{
-  "content": "Me too!"
-}
-```
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "message": "Comment added",
-  "data": {
-    "id": "uuid",
-    "content": "Me too!",
-    "created_at": "2024-01-15T11:00:00.000Z",
-    "user": {
-      "id": "uuid",
-      "name": "Jane Doe",
-      "avatar_url": null
-    }
-  }
-}
-```
-
----
-
-### Like Thread
-
-Idempotent — liking an already-liked thread is a no-op. A notification is sent to the author.
-
-```http
-POST /threads/:id/like
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Thread liked",
-  "data": { "like_count": 13 }
-}
-```
-
----
-
-### Unlike Thread
-
-```http
-DELETE /threads/:id/like
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Like removed",
-  "data": { "like_count": 12 }
-}
-```
-
----
-
-### Get Notifications
-
-Returns the 50 most recent notifications.
-
-```http
-GET /notifications
-```
-
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Notifications retrieved",
-  "data": [
-    {
-      "id": "uuid",
-      "type": "comment",
-      "message": "Someone commented on your post",
-      "is_read": false,
-      "created_at": "2024-01-15T12:00:00.000Z",
-      "actor": {
-        "id": "uuid",
-        "name": "Jane Doe",
-        "avatar_url": null
-      }
-    },
-    {
-      "id": "uuid",
-      "type": "like",
-      "message": "Someone liked your post",
-      "is_read": true,
-      "created_at": "2024-01-14T09:00:00.000Z",
-      "actor": null
-    }
-  ]
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`  | `/notifications` | Last 50 notifications with `actor: { id, name, avatar_url }` |
+| `PATCH` | `/notifications/read-all` | Mark all notifications as read |
+| `PATCH` | `/notifications/:notificationId/read` | Mark a single notification as read |
 
 **Notification types:** `comment` · `like`
+Auto-generated by DB triggers when someone comments on or likes a thread.
 
 ---
 
-### Mark All Notifications Read
+## 17. Payments
 
-```http
-PATCH /notifications/read-all
+Lightning Network tipping via LNURL-pay.
+All endpoints require `Authorization: Bearer <token>` except `/webhook`.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/payments/validate` | ✓ | Validate LN address or LNURL before amount entry. Returns `{ valid, min_sats, max_sats, comment_allowed, description }` |
+| `POST` | `/payments/tip` | ✓ | Create tip → fetch invoice via LNURL-pay → store pending tx. Returns `{ invoice, payment_hash, expires_at }` |
+| `POST` | `/payments/confirm` | ✓ | Mark own tx as completed after paying. Body: `payment_hash`. Scoped to sender. |
+| `GET`  | `/payments/status/:paymentHash` | ✓ | Poll payment status. Auto-expires pending tx after 10 min. Returns `{ status: pending\|completed\|failed }` |
+| `GET`  | `/payments/history` | ✓ | Transaction history. Query: `type=sent\|received` (default `sent`) |
+| `POST` | `/payments/webhook` | — | Lightning provider webhook. Body: `payment_hash`. Header: `x-webhook-secret` |
+
+**Tip body:** `recipient_id` (UUID — SatsFlo user) **or** `lightning_address` (external), plus `amount_sats, thread_id?, note?`
+
+**Payment flow:**
+```
+POST /payments/validate   →  check address is reachable + get min/max
+POST /payments/tip        →  get invoice
+open lightning:<invoice>  →  user pays in wallet
+POST /payments/confirm    →  mark as completed
+GET  /payments/status/:hash →  poll to confirm (optional)
 ```
 
-**Headers:** `Authorization: Bearer <token>` (required)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "All notifications marked as read",
-  "data": null
-}
-```
+**Recipient must set `lightning_address`** via `PUT /users/profile`.
 
 ---
 
-## Constants & Enums
+## 18. Enums & Constants
 
-### Cycle Phases
-
-| Phase | Typical Days | Description |
-|-------|-------------|-------------|
-| `menstrual` | 1–5 | Period |
-| `follicular` | 6–13 | Pre-ovulation |
-| `ovulation` | 14–16 | Fertile window |
-| `luteal` | 17–28 | Post-ovulation |
-
-### Flow Intensity
-
-`spotting` · `light` · `medium` · `heavy`
-
-### Symptom Categories
-
-`physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep`
-
-### Mood Types
-
-`happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident`
-
-### Privacy Levels
-
-`private` · `friends` · `public`
-
-### Account Status
-
-`active` · `inactive` · `suspended` · `deleted`
+| Group | Values |
+|-------|--------|
+| Cycle phases | `menstrual` · `follicular` · `ovulation` · `luteal` |
+| Flow intensity | `spotting` · `light` · `medium` · `heavy` |
+| Cervical mucus | `dry` · `sticky` · `creamy` · `watery` · `egg_white` |
+| Symptom categories | `physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep` |
+| Mood types | `happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident` |
+| Account status | `active` · `inactive` · `suspended` · `deleted` |
+| Payment status | `pending` · `completed` · `failed` |
+| Notification types | `comment` · `like` |
+| Themes | `light` · `dark` · `system` |
+| Privacy | `private` · `friends` · `public` |
 
 ---
 
-## Error Codes
+## 19. Error Codes
 
-| Status | Description |
-|--------|-------------|
-| 400 | Bad Request — Invalid or missing input |
-| 401 | Unauthorized — Token missing, invalid, or expired |
-| 403 | Forbidden — Insufficient permissions |
-| 404 | Not Found — Resource does not exist |
-| 409 | Conflict — Resource already exists (e.g. duplicate email) |
-| 429 | Too Many Requests — Rate limited |
-| 500 | Internal Server Error |
-
-### Error Response Format
-
-```json
-{
-  "success": false,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Please provide a valid email address",
-      "value": "invalid-email"
-    }
-  ],
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
+| Status | Meaning |
+|--------|---------|
+| `400` | Bad Request — invalid or missing input |
+| `401` | Unauthorized — token missing, expired, or invalid |
+| `403` | Forbidden — insufficient permissions |
+| `404` | Not Found |
+| `409` | Conflict — resource already exists (e.g. duplicate email) |
+| `422` | Unprocessable — valid format but business rule violation (e.g. no lightning address set) |
+| `429` | Too Many Requests — rate limited |
+| `500` | Internal Server Error |
+| `502` | Bad Gateway — upstream Lightning service unreachable |
 
 ---
 
-## Standard Response Envelope
+## 20. Rate Limits
 
-All responses share the same structure:
-
-```json
-{
-  "success": true,
-  "message": "Human-readable message",
-  "data": { ... },
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
+| Group | Limit |
+|-------|-------|
+| General API | 100 req / 15 min |
+| Auth (login/refresh) | 5 req / 15 min |
+| Password reset | 3 req / hour |
+| Registration | 5 req / hour |
+| Sensitive data (health) | 30 req / min |
 
 ---
 
-## Rate Limits
+## Notes
 
-| Endpoint Group | Limit |
-|----------------|-------|
-| General API | 100 requests / 15 min |
-| Authentication | 5 requests / 15 min |
-| Password reset | 3 requests / hour |
-| Registration | 5 requests / hour |
-| Sensitive data | 30 requests / min |
-
----
-
-## Notes for Mobile Developers
-
-1. **Token storage** — Store tokens in Keychain (iOS) / Keystore (Android)
-2. **Token refresh** — Refresh the access token before it expires (`expiresIn: "15m"`); refresh tokens are rotated on each use
-3. **Date format** — Always use ISO 8601 (`YYYY-MM-DD`) for date fields
-4. **Timezone** — All timestamps are UTC; convert to the user's timezone in the app
-5. **Health data** — Encrypted at rest; decrypted automatically before API responses — no client-side decryption needed
-6. **Offline** — Cache cycle and health data locally; sync on reconnect
-7. **Email verification** — Prompt the user to verify email after registration; `emailVerified: false` in the register response signals this
+- All dates: `YYYY-MM-DD`. All timestamps: ISO 8601 UTC.
+- Upsert endpoints (`PUT /logs/:date`, `PUT /water-settings`, `POST /cycle-profile`) are safe to call multiple times — they create if missing, update if exists.
+- Health fields (`health_conditions`, `medications`, `notes`) are encrypted at rest with AES-256-GCM. Returned decrypted — no client-side work needed.
+- `email_otp` is a 6-digit code, valid 10 minutes. Resend via `POST /auth/resend-verification`.
+- Lightning invoices expire in 10 minutes. After expiry `GET /payments/status` returns `status: failed`.
+- `POST /payments/confirm` is scoped to `sender_id` — users can only confirm their own outgoing payments.

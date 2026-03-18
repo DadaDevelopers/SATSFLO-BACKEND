@@ -40,19 +40,46 @@ class CycleProfileService {
   /**
    * Create or replace a cycle profile for the authenticated user.
    */
-  async upsert(userId, { cycle_length, period_length, last_period_start }) {
+  async upsert(userId, { cycle_length, period_length, last_period_start, luteal_phase_length, ignore_irregular_cycle }) {
     const result = await pool.query(
-      `INSERT INTO ${TABLE} (user_id, cycle_length, period_length, last_period_start)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO ${TABLE} (user_id, cycle_length, period_length, last_period_start, luteal_phase_length, ignore_irregular_cycle)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (user_id) DO UPDATE SET
-         cycle_length       = EXCLUDED.cycle_length,
-         period_length      = EXCLUDED.period_length,
-         last_period_start  = EXCLUDED.last_period_start
+         cycle_length            = EXCLUDED.cycle_length,
+         period_length           = EXCLUDED.period_length,
+         last_period_start       = EXCLUDED.last_period_start,
+         luteal_phase_length     = EXCLUDED.luteal_phase_length,
+         ignore_irregular_cycle  = EXCLUDED.ignore_irregular_cycle,
+         updated_at              = NOW()
        RETURNING *`,
-      [userId, cycle_length, period_length, last_period_start]
+      [userId, cycle_length, period_length, last_period_start,
+       luteal_phase_length ?? 14, ignore_irregular_cycle ?? false]
     );
 
     return result.rows[0];
+  }
+
+  /**
+   * Partial update — only update fields that are provided.
+   */
+  async patch(userId, updates) {
+    const allowed = ['cycle_length', 'period_length', 'last_period_start', 'luteal_phase_length', 'ignore_irregular_cycle'];
+    const setClauses = ['updated_at = NOW()'];
+    const values = [userId];
+
+    for (const field of allowed) {
+      if (updates[field] !== undefined) {
+        values.push(updates[field]);
+        setClauses.push(`${field} = $${values.length}`);
+      }
+    }
+
+    const result = await pool.query(
+      `UPDATE ${TABLE} SET ${setClauses.join(', ')} WHERE user_id = $1 RETURNING *`,
+      values
+    );
+
+    return result.rows[0] || null;
   }
 
   /**

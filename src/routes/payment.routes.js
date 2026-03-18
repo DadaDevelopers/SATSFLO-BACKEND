@@ -6,7 +6,9 @@ const paymentController = require('../controllers/payment.controller');
 
 const router = Router();
 
+router.post('/validate',               authenticateToken, paymentController.validateAddress);
 router.post('/tip',                    authenticateToken, paymentController.createTip);
+router.post('/confirm',                authenticateToken, paymentController.confirm);
 router.get('/status/:paymentHash',     authenticateToken, paymentController.getStatus);
 router.get('/history',                 authenticateToken, paymentController.getHistory);
 router.post('/webhook',                paymentController.webhook);

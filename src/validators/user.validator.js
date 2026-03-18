@@ -38,7 +38,13 @@ const updateProfileValidation = [
   body('avatarUrl')
     .optional()
     .isURL()
-    .withMessage('Avatar must be a valid URL')
+    .withMessage('Avatar must be a valid URL'),
+
+  body('phone')
+    .optional()
+    .trim()
+    .matches(/^\+?[0-9\s\-().]{7,20}$/)
+    .withMessage('Invalid phone number format')
 ];
 
 /**
@@ -196,11 +202,7 @@ const searchUsersValidation = [
 const deleteAccountValidation = [
   body('password')
     .notEmpty()
-    .withMessage('Password is required to delete account'),
-
-  body('confirmation')
-    .equals('DELETE')
-    .withMessage('Please type DELETE to confirm account deletion')
+    .withMessage('Password is required to delete account')
 ];
 
 module.exports = {
