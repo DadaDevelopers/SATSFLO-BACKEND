@@ -1,322 +1,129 @@
-/**
- * Email Service
- *
- * Handles all email communications (verification, password reset, notifications)
- */
+'use strict';
 
 const nodemailer = require('nodemailer');
-const logger = require('../utils/logger');
 
-class EmailService {
-  constructor() {
-    this.transporter = null;
-    this.initialized = false;
+const transporter = nodemailer.createTransport({
+  host: 'smtp.resend.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: 'resend',
+    pass: process.env.RESEND_API_KEY || process.env.SMTP_PASS
   }
+});
 
-  /**
-   * Initialize email transporter
-   */
-  async initialize() {
-    if (this.initialized) return;
-
-    try {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_PORT === '465',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
-
-      // Verify connection in development
-      if (process.env.NODE_ENV === 'development') {
-        await this.transporter.verify();
-        logger.info('Email service connected');
-      }
-
-      this.initialized = true;
-    } catch (error) {
-      logger.error('Email service initialization failed', error);
-      // Don't throw - app should work without email in development
-    }
+// Verify connection on startup (non-fatal)
+transporter.verify((error) => {
+  if (error) {
+    console.error('❌ Email service error:', error.message);
+  } else {
+    console.log('✅ Email service ready');
   }
+});
 
-  /**
-   * Send email
-   * @param {Object} options - Email options
-   */
-  async sendEmail({ to, subject, html, text }) {
-    if (!this.initialized) {
-      await this.initialize();
-    }
+const FROM = 'SatsFlo <onboarding@resend.dev>';
+const DEEP_LINK = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL;
 
-    if (!this.transporter) {
-      logger.warn('Email not configured, skipping send', { to, subject });
-      return { success: false, reason: 'Email not configured' };
-    }
+// ─── Verification email (link-based) ────────────────────────────────────────
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: process.env.EMAIL_FROM || `"Satsflow" <${process.env.SMTP_USER}>`,
-        to,
-        subject,
-        html,
-        text
-      });
+const sendVerificationEmail = async (email, name, token) => {
+  const link = `${DEEP_LINK}/verify-email?token=${token}`;
 
-      logger.info('Email sent', { messageId: info.messageId, to });
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      logger.error('Failed to send email', error);
-      return { success: false, error: error.message };
-    }
-  }
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: 'Verify your SatsFlo account 🌸',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#F97316">Welcome to SatsFlo, ${name}! 🌸</h2>
+        <p>Thanks for signing up. Please verify your email to get started:</p>
+        <a href="${link}"
+           style="background:#F97316;color:white;padding:12px 24px;
+                  border-radius:8px;text-decoration:none;
+                  display:inline-block;margin:16px 0">
+          Verify Email
+        </a>
+        <p>Or copy this link:</p>
+        <p style="color:#888;font-size:12px;word-break:break-all">${link}</p>
+        <p style="color:#888;font-size:12px;margin-top:24px">Link expires in 24 hours.</p>
+      </div>
+    `
+  });
+};
 
-  /**
-   * Send verification email
-   * token is the 6-digit OTP code
-   */
-  async sendVerificationEmail(email, token, name = 'there') {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .header h1 { color: white; margin: 0; font-size: 28px; }
-          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .otp-box { background: #fff; border: 2px solid #FF6B9D; border-radius: 12px; padding: 20px 30px; text-align: center; margin: 24px 0; }
-          .otp-code { font-size: 42px; font-weight: bold; letter-spacing: 8px; color: #C44569; margin: 0; }
-          .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Welcome to Satsflow!</h1>
-          </div>
-          <div class="content">
-            <p>Hi ${name},</p>
-            <p>Thanks for signing up for Satsflow! Use the code below to verify your email address.</p>
-            <div class="otp-box">
-              <p style="margin: 0 0 8px 0; color: #666; font-size: 14px;">Your verification code is:</p>
-              <p class="otp-code"><strong>${token}</strong></p>
-            </div>
-            <p>This code expires in <strong>10 minutes</strong>.</p>
-            <p>If you didn't create an account, you can safely ignore this email.</p>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Satsflow. Your health, your data.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+// ─── OTP email (6-digit code) ────────────────────────────────────────────────
 
-    const text = `
-      Welcome to Satsflow!
+const sendOTPEmail = async (email, name, otp) => {
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: 'Your SatsFlo verification code',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#F97316">Hi ${name},</h2>
+        <p>Your verification code is:</p>
+        <h1 style="font-size:52px;letter-spacing:12px;color:#F97316;margin:24px 0">
+          ${otp}
+        </h1>
+        <p style="color:#888;font-size:12px">
+          Expires in 10 minutes. Do not share this code.
+        </p>
+      </div>
+    `
+  });
+};
 
-      Hi ${name},
+// ─── Password reset ──────────────────────────────────────────────────────────
 
-      Thanks for signing up! Your verification code is: ${token}
+const sendPasswordResetEmail = async (email, name, token) => {
+  const link = `${DEEP_LINK}/reset-password?token=${token}`;
 
-      This code expires in 10 minutes.
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: 'Reset your SatsFlo password',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#F97316">Password Reset</h2>
+        <p>Hi ${name}, click below to reset your password:</p>
+        <a href="${link}"
+           style="background:#F97316;color:white;padding:12px 24px;
+                  border-radius:8px;text-decoration:none;
+                  display:inline-block;margin:16px 0">
+          Reset Password
+        </a>
+        <p>Or copy this link:</p>
+        <p style="color:#888;font-size:12px;word-break:break-all">${link}</p>
+        <p style="color:#888;font-size:12px;margin-top:24px">
+          Expires in 1 hour. If you didn't request this, ignore this email.
+        </p>
+      </div>
+    `
+  });
+};
 
-      If you didn't create an account, you can safely ignore this email.
-    `;
+// ─── Welcome email (post-verification) ──────────────────────────────────────
 
-    return this.sendEmail({
-      to: email,
-      subject: 'Your Satsflow verification code',
-      html,
-      text
-    });
-  }
+const sendWelcomeEmail = async (email, name) => {
+  await transporter.sendMail({
+    from: FROM,
+    to: email,
+    subject: 'Welcome to SatsFlo! 🎉',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
+        <h2 style="color:#F97316">You're all set, ${name}! 🎉</h2>
+        <p>Your email is verified. Start by logging your last period date in the app.</p>
+        <p style="color:#888;font-size:12px;margin-top:24px">Your health, your data — SatsFlo.</p>
+      </div>
+    `
+  });
+};
 
-  /**
-   * Send password reset email
-   */
-  async sendPasswordResetEmail(email, token, name = 'there') {
-    const deepLinkBase = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL;
-    const resetUrl = `${deepLinkBase}/reset-password?token=${token}`;
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .header h1 { color: white; margin: 0; font-size: 28px; }
-          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; background: #FF6B9D; color: white; padding: 14px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 20px 0; }
-          .warning { background: #fff3cd; border: 1px solid #ffc107; padding: 10px; border-radius: 5px; margin: 15px 0; }
-          .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Password Reset</h1>
-          </div>
-          <div class="content">
-            <p>Hi ${name},</p>
-            <p>We received a request to reset your password. Click the button below to create a new password:</p>
-            <p style="text-align: center;">
-              <a href="${resetUrl}" class="button">Reset Password</a>
-            </p>
-            <p>Or copy this link: <br><small>${resetUrl}</small></p>
-            <div class="warning">
-              <strong>Security notice:</strong> This link expires in 1 hour. If you didn't request this, please ignore this email or contact support if you're concerned.
-            </div>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Satsflow. Your health, your data.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const text = `
-      Password Reset Request
-
-      Hi ${name},
-
-      We received a request to reset your password. Visit this link to create a new password:
-      ${resetUrl}
-
-      This link expires in 1 hour.
-
-      If you didn't request this, please ignore this email.
-    `;
-
-    return this.sendEmail({
-      to: email,
-      subject: 'Reset your Satsflow password',
-      html,
-      text
-    });
-  }
-
-  /**
-   * Send period reminder notification
-   */
-  async sendPeriodReminderEmail(email, name, daysUntil) {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .header h1 { color: white; margin: 0; font-size: 28px; }
-          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .highlight { font-size: 24px; color: #FF6B9D; font-weight: bold; text-align: center; margin: 20px 0; }
-          .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Period Reminder</h1>
-          </div>
-          <div class="content">
-            <p>Hi ${name},</p>
-            <p class="highlight">Your period is expected in ${daysUntil} day${daysUntil === 1 ? '' : 's'}</p>
-            <p>Based on your cycle history, we predict your next period will start soon. Remember to prepare accordingly!</p>
-            <p>Open the app to see more details and log any symptoms you're experiencing.</p>
-          </div>
-          <div class="footer">
-            <p>You can disable these reminders in your app settings.</p>
-            <p>&copy; ${new Date().getFullYear()} Satsflow</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    return this.sendEmail({
-      to: email,
-      subject: `Period reminder: ${daysUntil} day${daysUntil === 1 ? '' : 's'} away`,
-      html,
-      text: `Hi ${name}, your period is expected in ${daysUntil} day${daysUntil === 1 ? '' : 's'}.`
-    });
-  }
-
-  /**
-   * Send welcome email after verification
-   */
-  async sendWelcomeEmail(email, name = 'there') {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .header h1 { color: white; margin: 0; font-size: 28px; }
-          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .feature { display: flex; align-items: center; margin: 15px 0; padding: 10px; background: white; border-radius: 8px; }
-          .feature-icon { font-size: 24px; margin-right: 15px; }
-          .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Welcome to Satsflow!</h1>
-          </div>
-          <div class="content">
-            <p>Hi ${name},</p>
-            <p>Your email is verified and you're all set! Here's what you can do with Satsflow:</p>
-
-            <div class="feature">
-              <span class="feature-icon">📅</span>
-              <div><strong>Track your cycle</strong> - Log periods and get predictions</div>
-            </div>
-
-            <div class="feature">
-              <span class="feature-icon">💭</span>
-              <div><strong>Log symptoms & moods</strong> - Understand your patterns</div>
-            </div>
-
-            <div class="feature">
-              <span class="feature-icon">⚡</span>
-              <div><strong>Earn Bitcoin rewards</strong> - Get sats for healthy habits</div>
-            </div>
-
-            <div class="feature">
-              <span class="feature-icon">👥</span>
-              <div><strong>Join the community</strong> - Connect with others</div>
-            </div>
-
-            <p>Your health data is encrypted and only you can access it.</p>
-            <p>Get started by logging your last period date in the app!</p>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Satsflow. Your health, your data.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    return this.sendEmail({
-      to: email,
-      subject: 'Welcome to Satsflow! 🎉',
-      html,
-      text: `Welcome to Satsflow, ${name}! Your email is verified. Start by logging your last period date in the app.`
-    });
-  }
-}
-
-// Export singleton instance
-module.exports = new EmailService();
+module.exports = {
+  sendVerificationEmail,
+  sendOTPEmail,
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+  // no-op kept for backwards compat with server.js initialize() call
+  initialize: () => Promise.resolve()
+};
