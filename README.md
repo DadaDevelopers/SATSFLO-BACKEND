@@ -1,18 +1,38 @@
-# Satsflow Backend API
+# SatsFlo Backend
 
-Production-ready Node.js backend for **Satsflow** — a period tracking mobile app with Bitcoin Lightning Network rewards and community features.
+Period tracking with Bitcoin Lightning rewards.
+
+Node.js · Express · PostgreSQL · JWT Auth · LNURL-pay · Resend Email
 
 ---
 
-## Features
+## Table of Contents
 
-- **Period Tracking** — Track cycles, periods, daily logs, and get phase predictions
-- **Health Monitoring** — Log symptoms and moods with AES-256-GCM encryption at rest
-- **Analytics** — Cycle insights, symptom patterns, and mood distributions
-- **Manual JWT Auth** — bcrypt password hashing + short-lived access tokens + refresh token rotation
-- **Data Encryption** — Sensitive health fields encrypted before DB storage
-- **RESTful API** — Mobile-optimized endpoints with consistent JSON responses
-- **PostgreSQL** — Direct `pg` pool, parameterized queries, schema migrations via `node-pg-migrate`
+1. [Overview](#overview)
+2. [Tech Stack](#tech-stack)
+3. [Project Structure](#project-structure)
+4. [Getting Started](#getting-started)
+5. [Environment Variables](#environment-variables)
+6. [Database & Migrations](#database--migrations)
+7. [Authentication Flow](#authentication-flow)
+8. [Payment Flow](#payment-flow)
+9. [API Reference](#api-reference)
+10. [Route Registration](#route-registration)
+
+---
+
+## Overview
+
+SatsFlo is a menstrual health tracking app that rewards users with Bitcoin (sats) for logging consistently. The backend provides REST API endpoints for:
+
+- User auth (register, login, email OTP verification, password reset)
+- Cycle tracking (profiles, logs, phases, predictions)
+- Daily health logging (symptoms, moods, water, journal)
+- Community (threads, comments, likes, notifications)
+- Direct messaging (1-to-1 chats and group chats)
+- Partner system (paired cycle viewing with granular sharing permissions)
+- Bitcoin Lightning tips via LNURL-pay protocol
+- Wallet management (save / retrieve Lightning address)
 
 ---
 
@@ -20,308 +40,466 @@ Production-ready Node.js backend for **Satsflow** — a period tracking mobile a
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js 18+ |
-| Framework | Express.js 5 |
-| Database | PostgreSQL 13+ (via `pg` pool) |
-| Auth | JWT access + refresh tokens (`jsonwebtoken`) |
-| Password hashing | `bcrypt` (12 rounds) |
+| Runtime | Node.js 20+ |
+| Framework | Express 4 |
+| Database | PostgreSQL 15+ |
+| ORM/Query | `pg` (raw parameterised SQL) |
 | Migrations | `node-pg-migrate` |
+| Auth | `bcrypt` + `jsonwebtoken` (access + refresh tokens) |
+| Email | Nodemailer → Resend SMTP (`smtp.resend.com:465`) |
+| Lightning | LNURL-pay protocol + `bolt11` decoder + `bech32` |
+| HTTP client | `axios` |
 | Validation | `express-validator` |
-| Security | Helmet, CORS, rate limiting |
-| Email | Nodemailer |
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18 or higher
-- PostgreSQL 13 or higher (running locally or remote)
-
-### 1. Install dependencies
-
-```bash
-git clone https://github.com/Dada-Developers/SATSFLO-BACKEND.git
-cd SATSFLO-BACKEND
-npm install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env   # then edit .env with your values
-```
-
-Required `.env` variables:
-
-```env
-# Server
-NODE_ENV=development
-PORT=3000
-API_VERSION=v1
-
-# PostgreSQL (DATABASE_URL takes precedence if set)
-DATABASE_URL=postgresql://satsflow_user:your_db_password@localhost:5432/satsflow
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=satsflow
-DB_USER=satsflow_user
-DB_PASSWORD=your_db_password
-DB_SSL=false
-
-# JWT — generate with: npm run generate-key
-JWT_SECRET=your_32_char_minimum_secret
-JWT_REFRESH_SECRET=another_32_char_secret
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-
-# Encryption — generate with: npm run generate-key
-ENCRYPTION_KEY=your_64_char_hex_key
-
-# Email (optional in development)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
-EMAIL_FROM=Satsflow <noreply@satsflow.com>
-
-# App
-FRONTEND_URL=http://localhost:8080
-
-# Rate limiting / logging
-RATE_LIMIT_WINDOW=15
-RATE_LIMIT_MAX_REQUESTS=100
-LOG_LEVEL=debug
-
-# Lightning (reserved for future integration)
-# LIGHTNING_NODE_URL=
-# LIGHTNING_API_KEY=
-```
-
-`MAX_FILE_SIZE` is still present in `.env.example` as a reserved app setting, but it is not yet wired into backend runtime behavior.
-
-### 3. Create the database
-
-```bash
-# As postgres superuser
-psql -U postgres -c "CREATE USER satsflow_user WITH PASSWORD 'your_db_password';"
-psql -U postgres -c "CREATE DATABASE satsflow OWNER satsflow_user;"
-```
-
-### 4. Run migrations
-
-```bash
-npm run migrate
-```
-
-### 5. (Optional) Seed test data
-
-```bash
-npm run seed
-```
-
-Test accounts created by seed:
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@satsflow.com | Admin123! |
-| User | test@satsflow.com | Test123! |
-| Demo | demo@satsflow.com | Demo123! |
-
-### 6. Start the server
-
-```bash
-npm run dev      # development (hot reload)
-npm start        # production
-```
-
----
-
-## npm Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start with nodemon hot reload |
-| `npm start` | Start production server |
-| `npm run migrate` | Run pending migrations (up) |
-| `npm run migrate:down` | Roll back one migration |
-| `npm run migrate:status` | Show migration status |
-| `npm run migrate:create` | Scaffold a new migration file |
-| `npm run seed` | Seed development data |
-| `npm run generate-key` | Generate a random 32-byte hex key |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Run Prettier |
+| Security | `helmet`, `cors`, `express-rate-limit` |
 
 ---
 
 ## Project Structure
 
 ```
-SATSFLO-BACKEND/
-├── src/
-│   ├── app.js                  # Express app setup (middleware, routes)
-│   ├── server.js               # HTTP server + graceful shutdown
-│   ├── config/
-│   │   ├── db.js               # pg Pool configuration
-│   │   ├── database.js         # Exports pool + table name constants
-│   │   └── jwt.js              # JWT secret/expiry config
-│   ├── controllers/
-│   │   ├── auth/               # Register, login, refresh, forgot password
-│   │   ├── cycle/              # Period tracking
-│   │   ├── health/             # Symptoms & moods
-│   │   └── user/               # Profile management
-│   ├── middleware/
-│   │   ├── auth.js             # JWT verification + role authorization
-│   │   ├── errorHandler.js     # Global error handler
-│   │   ├── rateLimiter.js      # Per-route rate limits
-│   │   └── validator.js        # express-validator helper
-│   ├── routes/                 # Route definitions per feature
-│   ├── services/               # Business logic
-│   │   ├── auth.service.js     # Register/login/token management
-│   │   ├── cycle.service.js    # Cycle + period tracking
-│   │   ├── health.service.js   # Symptoms + moods
-│   │   ├── user.service.js     # Profile + health profile
-│   │   ├── community.service.js
-│   │   ├── journal.service.js
-│   │   ├── dayLogs.service.js
-│   │   ├── waterSettings.service.js
-│   │   └── cycleProfile.service.js
-│   ├── utils/
-│   │   ├── constants.js        # Enums, defaults, limits
-│   │   ├── encryption.js       # AES-256-GCM encrypt/decrypt
-│   │   ├── logger.js           # Winston logger
-│   │   └── response.js         # Standardised API response helpers
-│   ├── validators/             # express-validator rule sets
-│   └── database/
-│       ├── migrations/         # node-pg-migrate migration files
-│       └── seeds/              # Development seed data
-└── .env                        # Local environment variables (git-ignored)
+src/
+├── app.js                        # Express app setup, middleware, CORS
+├── server.js                     # HTTP server entry point
+├── config/
+│   ├── database.js               # Exports { pool }
+│   ├── db.js                     # pg Pool (DATABASE_URL or individual vars)
+│   └── jwt.js                    # JWT secret / expiry config
+├── routes/
+│   ├── index.js                  # Central router — mounts all route modules
+│   ├── auth.routes.js
+│   ├── user.routes.js
+│   ├── cycle.routes.js
+│   ├── cycleProfile.routes.js
+│   ├── dayLogs.routes.js
+│   ├── waterSettings.routes.js
+│   ├── health.routes.js
+│   ├── journal.routes.js
+│   ├── community.routes.js       # /threads + /notifications
+│   ├── payment.routes.js
+│   ├── lightning.routes.js       # Blink wallet integration
+│   ├── wallet.routes.js          # GET/PUT /wallet/lightning
+│   ├── partner.routes.js
+│   ├── chat.routes.js
+│   └── group.routes.js
+├── controllers/                  # HTTP handlers (thin layer)
+├── services/                     # Business logic
+├── middleware/
+│   ├── auth.js                   # authenticateToken, optionalAuth
+│   └── validator.js              # express-validator error formatter
+├── validators/                   # Per-route validation rules
+├── utils/
+│   ├── response.js               # ApiResponse helpers
+│   └── logger.js
+└── database/
+    ├── migrations/               # node-pg-migrate files (timestamp-prefixed)
+    └── seeds/
 ```
 
 ---
 
-## API Overview
+## Getting Started
 
-### Base URL
+```bash
+# 1. Install dependencies
+npm install
 
+# 2. Copy env template and fill in values
+cp .env.example .env
+
+# 3. Run database migrations
+npm run migrate
+
+# 4. (Optional) Seed initial data
+npm run seed
+
+# 5. Start dev server with auto-reload
+npm run dev
+
+# 6. Start production server
+npm start
 ```
-http://localhost:3000/api/v1
+
+---
+
+## Environment Variables
+
+```env
+# ── Server ────────────────────────────────────────────────────
+NODE_ENV=development
+PORT=3000
+API_VERSION=v1
+
+# ── Database ──────────────────────────────────────────────────
+# Option A: connection string (Render, Railway, etc.)
+DATABASE_URL=postgres://user:pass@host:5432/dbname
+
+# Option B: individual vars (local dev)
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=satsflow
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_SSL=false               # set to true in production
+
+# ── JWT ───────────────────────────────────────────────────────
+JWT_SECRET=your_jwt_secret_here
+JWT_REFRESH_SECRET=your_refresh_secret_here
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=30d
+
+# ── Email (Resend SMTP) ───────────────────────────────────────
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
+# From: SatsFlo <info@satsflo.app>
+
+# ── App links ─────────────────────────────────────────────────
+DEEP_LINK_URL=satsflo://           # mobile deep link prefix
+FRONTEND_URL=https://satsflo.app   # fallback for email links
+
+# ── Payments ──────────────────────────────────────────────────
+WEBHOOK_SECRET=your_webhook_secret  # validates /payments/webhook calls
+
+# ── CORS ──────────────────────────────────────────────────────
+ALLOWED_ORIGINS=*                   # comma-separated origins, or * for all
 ```
 
-Examples below assume the default `API_VERSION=v1`. If you change `API_VERSION`, replace `v1` in the route prefix accordingly.
+> **SSL:** Enabled automatically when `NODE_ENV=production` or `DB_SSL=true`.
+> On Render, use `DATABASE_URL` — SSL is handled automatically.
 
-### Authentication
+---
+
+## Database & Migrations
+
+```bash
+npm run migrate        # apply all pending migrations
+npm run migrate:down   # roll back last migration
+```
+
+| Migration | Description |
+|-----------|-------------|
+| `20260310000000_initial_schema` | Core tables: users, cycles, symptoms, moods, threads, notifications, gift_transactions |
+| `20260316000000_payments_otp` | OTP columns on users; bolt11_invoice, payment_hash, note, expires_at on gift_transactions |
+| `20260318000000_profile_wallet` | users.phone, cycle_profiles.luteal_phase_length + ignore_irregular_cycle |
+| `20260318000001_partner_system` | partner_invites, partnerships |
+| `20260318000002_chats_groups` | conversations, direct_messages, typing_indicators, groups, group_members, group_messages |
+| `20260319000000_gift_transactions_fix` | receiver_id → nullable, add lightning_address column |
+| `20260319000001_lightning_blink_foundation` | lightning_wallets, lightning_transactions (Blink provider) |
+| `20260319000002_lightning_payment_methods` | payment_method / lnurl columns on lightning_transactions |
+| `20260319000003_lightning_wallet_shared_provider_ids` | Drop unique constraint on provider_wallet_id |
+
+---
+
+## Authentication Flow
 
 All protected endpoints require:
-
 ```
-Authorization: Bearer <access_token>
-```
-
-When the access token expires, swap the refresh token:
-
-```http
-POST /api/v1/auth/refresh
-{ "refreshToken": "eyJhbGci..." }
+Authorization: Bearer <accessToken>
 ```
 
-### Endpoint Summary
+### Register + OTP verify
+```
+POST /api/v1/auth/register          { name, email, password, date_of_birth? }
+  → 6-digit OTP sent to email
+POST /api/v1/auth/verify-otp        { email, otp }
+  → account activated
+```
 
-| Group | Endpoints |
+### Login / token lifecycle
+```
+POST /api/v1/auth/login             { email, password }
+  → { access_token, refresh_token, user }
+
+POST /api/v1/auth/refresh           { refresh_token }
+  → { access_token, refresh_token }
+
+POST /api/v1/auth/logout            { refresh_token }
+  → revokes refresh token
+```
+
+### Password reset
+```
+POST /api/v1/auth/forgot-password   { email }
+  → reset link sent to email (expires 1 h)
+
+POST /api/v1/auth/reset-password    { token, new_password }
+
+PUT  /api/v1/auth/change-password   { current_password, new_password }   [auth]
+```
+
+---
+
+## Payment Flow
+
+SatsFlo uses the **LNURL-pay protocol** to send Bitcoin tips to any Lightning wallet.
+
+```
+Step 1  POST /payments/validate     Validate LN address, returns min/max sats
+Step 2  [UI shows amount input using min/max from step 1]
+Step 3  POST /payments/tip          Fetches BOLT11 invoice from recipient's wallet
+Step 4  [Frontend shows QR code + lightning:<invoice> deep link]
+Step 5  [User pays from their own Lightning wallet app]
+Step 6  POST /payments/confirm      "I've sent the tip" → marks completed
+Step 7  [Success screen]
+```
+
+### Step 1 — Validate (`POST /payments/validate`)
+
+Resolves either format before the user enters an amount:
+
+| Input | Resolution |
 |-------|-----------|
-| Auth | register, login, logout, logout-all, refresh, verify-email, resend-verification, forgot-password, reset-password, change-password, me |
-| Users | profile, health-profile, preferences, export, delete account |
-| Cycle Profile | upsert, get with live calculations |
-| Cycles | start, end, log daily, current, history, analytics, get/update/delete by id |
-| Day Logs | get by date, upsert, get range |
-| Health | log/batch/get/update/delete symptoms & moods, analytics, daily summary, trends |
-| Journal | get by month, create entry |
-| Water Settings | get, update |
-| Community | threads, comments, likes, notifications |
-
-See [API.md](./API.md) for the full reference with request/response examples.
-
----
-
-## Auth Flow
+| `alice@getalby.com` | `GET https://getalby.com/.well-known/lnurlp/alice` |
+| `LNURL1DP68GURN8...` | bech32 decode → GET decoded URL |
 
 ```
-Register  →  bcrypt.hash(password)  →  INSERT users  →  access + refresh JWT
-Login     →  bcrypt.compare()       →  UPDATE last_login  →  access + refresh JWT
-Request   →  jwt.verify(accessToken)  →  req.user attached
-Refresh   →  verify refreshToken in DB  →  revoke old  →  issue new pair
-Logout    →  SET revoked = true on refresh token
+Request:  { "lightning_address": "alice@getalby.com" }
+Response: { "valid": true, "min_sats": 1, "max_sats": 1000000,
+            "comment_allowed": 140, "description": "..." }
 ```
 
-- Access tokens expire in `15m` by default
-- Refresh tokens expire in `7d` and are rotated on every refresh
-- All refresh tokens are revoked on password reset or `logout-all`
+### Step 3 — Create Tip (`POST /payments/tip`)
+
+```
+// Tip a SatsFlo user (looks up their saved lightning address)
+{ "recipient_id": "uuid", "amount_sats": 100, "note": "Great post!", "thread_id": "uuid?" }
+
+// Tip any external Lightning wallet
+{ "lightning_address": "alice@getalby.com", "amount_sats": 100 }
+
+Response:
+{
+  "transaction_id": "uuid",
+  "bolt11_invoice": "lnbc...",
+  "payment_hash": "abc123...",
+  "amount_sats": 100,
+  "expires_at": "...",          ← 10 minutes from now
+  "lightning_address": "alice@getalby.com"
+}
+```
+
+Payment hash is extracted from the BOLT11 invoice using the `bolt11` npm decoder
+(`decoded.tagsObject.payment_hash`), with a `crypto.randomBytes` fallback.
+
+### Step 6 — Confirm (`POST /payments/confirm`)
+
+```
+Request:  { "payment_hash": "abc123..." }
+```
+
+- Scoped to `sender_id = req.user.id` — users can only confirm their own transactions
+- Checks `expires_at > NOW()` → 410 if invoice expired
+- Returns 409 if already settled
+- No webhook needed — this is the **primary** completion path
+
+### Webhook (bonus, `POST /payments/webhook`)
+
+For wallets that support server callbacks:
+```
+Header:  x-webhook-secret: <WEBHOOK_SECRET>
+Body:    { "payment_hash": "abc123..." }
+```
+
+### Poll status / history
+
+```
+GET /payments/status/:paymentHash   → { status: pending|completed|failed }
+GET /payments/history?type=sent     → array of transactions
+GET /payments/history?type=received → array of transactions
+```
 
 ---
 
-## Security
+## API Reference
 
-| Feature | Implementation |
-|---------|---------------|
-| Password hashing | bcrypt, 12 salt rounds |
-| Health data encryption | AES-256-GCM, key from `ENCRYPTION_KEY` |
-| JWT tokens | HS256, short-lived access + rotating refresh |
-| SQL injection prevention | Parameterized queries (`$1`, `$2`, ...) via `pg` |
-| Rate limiting | `express-rate-limit` per route group |
-| Input validation | `express-validator` on every mutating endpoint |
-| Security headers | `helmet` middleware |
-| CORS | Configurable origin whitelist |
+Base URL: `https://your-domain.com/api/v1`
+
+Response envelope:
+```json
+{ "success": true, "message": "OK", "data": { ... } }
+```
+
+### Auth
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/auth/register` | — | |
+| POST | `/auth/login` | — | |
+| POST | `/auth/refresh` | — | |
+| POST | `/auth/logout` | ✓ | |
+| GET | `/auth/verify-email` | — | query: `token` |
+| POST | `/auth/verify-otp` | — | body: `{ email, otp }` |
+| POST | `/auth/forgot-password` | — | |
+| POST | `/auth/reset-password` | — | |
+| PUT | `/auth/change-password` | ✓ | |
+| POST | `/auth/resend-verification` | — | |
+
+### Users
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/users/profile` | ✓ | Includes phone, lightning_address |
+| PUT | `/users/profile` | ✓ | name, phone, date_of_birth, avatar_url, language |
+| GET | `/users/preferences` | ✓ | |
+| PUT | `/users/preferences` | ✓ | Deep-merged JSONB |
+| GET | `/users/health-profile` | ✓ | |
+| PUT | `/users/health-profile` | ✓ | |
+| DELETE | `/users/account` | ✓ | body: `{ password }` |
+| GET | `/users/export` | ✓ | GDPR export |
+
+### Cycles
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/cycles` | ✓ | |
+| GET | `/cycles` | ✓ | |
+| GET | `/cycles/current` | ✓ | With predictions |
+| PUT | `/cycles/:id` | ✓ | |
+| POST | `/cycles/:id/end` | ✓ | |
+| POST | `/cycles/:cycleId/logs` | ✓ | Add daily log to cycle |
+
+### Cycle Profile
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/cycle-profile` | ✓ | Create/replace |
+| PUT | `/cycle-profile` | ✓ | Partial update |
+| GET | `/cycle-profile` | ✓ | Live phase calculations |
+
+### Daily Logs
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/logs` | ✓ | |
+| GET | `/logs` | ✓ | query: `start_date`, `end_date` |
+| GET | `/logs/:date` | ✓ | |
+| POST | `/logs/symptoms` | ✓ | |
+| POST | `/logs/moods` | ✓ | |
+| GET | `/logs/symptoms` | ✓ | |
+| GET | `/logs/moods` | ✓ | |
+
+### Water Settings
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/water-settings` | ✓ | |
+| PUT | `/water-settings` | ✓ | |
+
+### Journal
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/journal` | ✓ | |
+| GET | `/journal` | ✓ | |
+| GET | `/journal/:id` | ✓ | |
+| PUT | `/journal/:id` | ✓ | |
+| DELETE | `/journal/:id` | ✓ | |
+
+### Wallet
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/wallet/lightning` | ✓ | Returns `{ lightning_address }` |
+| PUT | `/wallet/lightning` | ✓ | body: `{ lightning_address }` — must be `user@domain.com` |
+
+### Payments
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/payments/validate` | ✓ | Accepts `user@domain.com` or `LNURL1...` |
+| POST | `/payments/tip` | ✓ | `recipient_id` or `lightning_address` |
+| POST | `/payments/confirm` | ✓ | body: `{ payment_hash }` |
+| GET | `/payments/status/:paymentHash` | ✓ | |
+| GET | `/payments/history` | ✓ | query: `type=sent\|received` |
+| POST | `/payments/webhook` | — | header: `x-webhook-secret` |
+
+### Lightning — Blink
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/lightning/wallet` | ✓ | |
+| POST | `/lightning/wallet/sync` | ✓ | |
+| POST | `/lightning/invoices` | ✓ | |
+| POST | `/lightning/payments/probe` | ✓ | |
+| POST | `/lightning/payments/pay` | ✓ | |
+| POST | `/lightning/payments/preview` | ✓ | |
+| POST | `/lightning/payments/lnurl` | ✓ | |
+| POST | `/lightning/payments/ln-address` | ✓ | |
+| GET | `/lightning/transactions` | ✓ | |
+| GET | `/lightning/proof-of-payment` | ✓ | |
+
+### Partner System
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/partner/invite` | ✓ | Returns `{ invite_code, expires_at }` — 24h expiry |
+| GET | `/partner/invite/status` | ✓ | `{ status: pending\|accepted\|expired }` |
+| POST | `/partner/accept` | ✓ | body: `{ invite_code }` |
+| GET | `/partner` | ✓ | Partner info + nicknames |
+| DELETE | `/partner` | ✓ | Unpair |
+| PUT | `/partner/nickname` | ✓ | `{ my_nickname, partner_nickname }` |
+| GET | `/partner/settings` | ✓ | Your sharing permissions |
+| PUT | `/partner/settings` | ✓ | Update sharing permissions |
+| PUT | `/partner/mode` | ✓ | `{ partner_mode_enabled: bool }` |
+| GET | `/partner/cycle` | ✓ | Partner's cycle, filtered by their sharing settings |
+| GET | `/partner/calendar` | ✓ | Partner's calendar dates |
+
+### Chats (DMs)
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/chats` | ✓ | With `unread_count` + `is_typing` |
+| POST | `/chats` | ✓ | body: `{ recipient_id }` — idempotent |
+| GET | `/chats/:conversationId` | ✓ | Newest first. query: `page`, `limit` |
+| POST | `/chats/:conversationId` | ✓ | body: `{ content }` |
+| DELETE | `/chats/:conversationId/:messageId` | ✓ | Soft delete |
+| PUT | `/chats/:conversationId/read` | ✓ | Mark all read |
+| POST | `/chats/:conversationId/typing` | ✓ | `{ is_typing: bool }` — expires 5s |
+
+### Groups
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/groups` | ✓ | Joined groups |
+| POST | `/groups` | ✓ | `{ name, description?, member_ids? }` |
+| GET | `/groups/:groupId` | ✓ | Info + member list |
+| PUT | `/groups/:groupId` | ✓ | Admin only |
+| DELETE | `/groups/:groupId` | ✓ | Admin only |
+| POST | `/groups/:groupId/members` | ✓ | `{ user_id }` — admin only |
+| DELETE | `/groups/:groupId/members/:userId` | ✓ | Admin only |
+| GET | `/groups/:groupId/messages` | ✓ | Newest first |
+| POST | `/groups/:groupId/messages` | ✓ | `{ content }` |
+| DELETE | `/groups/:groupId/messages/:messageId` | ✓ | Sender or admin |
+| POST | `/groups/:groupId/leave` | ✓ | Blocked if sole admin |
+
+### Community — Threads
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/threads` | opt | query: `search`, `tab=recent\|popular`, `page`, `limit` |
+| POST | `/threads` | ✓ | `{ content, image_url? }` |
+| GET | `/threads/:id` | opt | With comments + `is_liked_by_me` |
+| PUT | `/threads/:id` | ✓ | Owner only |
+| DELETE | `/threads/:id` | ✓ | Owner or admin |
+| POST | `/threads/:id/like` | ✓ | |
+| DELETE | `/threads/:id/like` | ✓ | |
+| POST | `/threads/:id/comments` | ✓ | `{ content }` |
+| PUT | `/threads/:id/comments/:cId` | ✓ | Owner only |
+| DELETE | `/threads/:id/comments/:cId` | ✓ | Owner or admin |
+
+### Notifications
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/notifications` | ✓ | Latest 50 with actor info |
+| PUT | `/notifications/read` | ✓ | Mark all read |
+| PATCH | `/notifications/:id/read` | ✓ | Mark single read |
 
 ---
 
-## Database Schema
+## Route Registration
 
-The full schema is in `src/database/migrations/20260310000000_initial_schema.js`.
+All routes mount under `/api/v1` in `src/routes/index.js`:
 
-Key tables:
+```js
+router.use('/auth',           authRoutes);
+router.use('/users',          userRoutes);
+router.use('/cycles',         cycleRoutes);
+router.use('/health',         healthRoutes);
+router.use('/cycle-profile',  cycleProfileRoutes);
+router.use('/logs',           dayLogsRoutes);
+router.use('/water-settings', waterSettingsRoutes);
+router.use('/journal',        journalRoutes);
+router.use('/payments',       paymentRoutes);
+router.use('/lightning',      lightningRoutes);
+router.use('/wallet',         walletRoutes);
+router.use('/partner',        partnerRoutes);
+router.use('/chats',          chatRoutes);
+router.use('/groups',         groupRoutes);
+router.use('/',               communityRoutes);   // /threads + /notifications
+```
 
-| Table | Purpose |
-|-------|---------|
-| `users` | Accounts, roles, email verification |
-| `refresh_tokens` | JWT refresh token store |
-| `password_resets` | Password reset tokens |
-| `health_profiles` | Per-user health config (encrypted fields) |
-| `cycles` | Menstrual cycle records |
-| `cycle_logs` | Daily tracking entries |
-| `cycle_profiles` | Simplified cycle widget |
-| `symptoms` | Symptom logs with severity |
-| `moods` | Mood logs with intensity |
-| `day_logs` | General daily log (water, weight, temp) |
-| `water_settings` | Water intake goal + cup config |
-| `journal_entries` | Private diary entries |
-| `threads` | Community posts |
-| `thread_comments` | Post comments |
-| `thread_likes` | Post likes (composite PK, no duplicates) |
-| `notifications` | Auto-populated by DB triggers |
-| `gift_transactions` | ⚡ Lightning sats tips (reserved) |
-| `forums` | Forum categories (reserved) |
-
----
-
-## For Dev 2 — Lightning / Community
-
-Reserved tables already in schema:
-
-- `gift_transactions` — Lightning sats tip between users
-- `forums` — Forum categories with slug routing
-
-Columns to extend for Lightning wallet integration:
-- Add `wallets` table for user Lightning node info
-- Add `rewards` table for earned sats tracking
-- Add `messages` table for direct messaging
-
----
-
-## License
-
-MIT
-
-## Support
-
-Open an issue at [GitHub Issues](https://github.com/Dada-Developers/SATSFLO-BACKEND/issues).
+Health check: `GET /api/v1/health`

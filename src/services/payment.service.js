@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const { bech32 } = require('bech32');
+const bolt11Decoder = require('bolt11');
 const { pool } = require('../config/database');
 
 // ─── Format validators ───────────────────────────────────────────────────────
@@ -130,8 +131,16 @@ class PaymentService {
     const bolt11Invoice = invoiceRes.data.pr;
     if (!bolt11Invoice) throw err('Lightning address returned no invoice', 502);
 
-    // Prefer payment_hash from response; fall back to last 64 chars of invoice
-    const paymentHash = invoiceRes.data.payment_hash || bolt11Invoice.slice(-64);
+    // Prefer payment_hash from callback response; decode from BOLT11 as fallback
+    let paymentHash = invoiceRes.data.payment_hash;
+    if (!paymentHash) {
+      try {
+        const decoded = bolt11Decoder.decode(bolt11Invoice);
+        paymentHash = decoded.tagsObject.payment_hash;
+      } catch {
+        paymentHash = require('crypto').randomBytes(32).toString('hex');
+      }
+    }
 
     return { bolt11Invoice, paymentHash };
   }
@@ -171,19 +180,22 @@ class PaymentService {
 
     const result = await pool.query(
       `INSERT INTO gift_transactions
-         (sender_id, receiver_id, amount_sats, thread_id, note, bolt11_invoice, payment_hash, expires_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
-       RETURNING id, amount_sats, status, created_at, payment_hash, expires_at`,
-      [senderId, resolvedRecipientId, amountSats, threadId || null, note || null, bolt11Invoice, paymentHash, expiresAt]
+         (sender_id, receiver_id, lightning_address, amount_sats, thread_id, note,
+          bolt11_invoice, payment_hash, expires_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+       RETURNING id, amount_sats, status, created_at, payment_hash, expires_at, lightning_address`,
+      [senderId, resolvedRecipientId, resolvedAddress, amountSats,
+       threadId || null, note || null, bolt11Invoice, paymentHash, expiresAt]
     );
 
     const tx = result.rows[0];
     return {
       transaction_id: tx.id,
-      invoice: bolt11Invoice,
+      bolt11_invoice: bolt11Invoice,
       payment_hash: tx.payment_hash,
       amount_sats: tx.amount_sats,
       expires_at: tx.expires_at,
+      lightning_address: tx.lightning_address,
     };
   }
 
@@ -218,15 +230,28 @@ class PaymentService {
    */
   async confirmBySender(senderId, paymentHash) {
     const result = await pool.query(
-      `UPDATE gift_transactions SET status = 'completed'
-       WHERE payment_hash = $1 AND sender_id = $2 AND status = 'pending'
-       RETURNING id, payment_hash, amount_sats, status`,
+      `UPDATE gift_transactions
+       SET status = 'completed'
+       WHERE payment_hash = $1
+         AND sender_id = $2
+         AND status = 'pending'
+         AND expires_at > NOW()
+       RETURNING id, payment_hash, amount_sats, status, lightning_address, receiver_id`,
       [paymentHash, senderId]
     );
     if (!result.rows[0]) {
-      const err = new Error('Transaction not found or already settled');
-      err.statusCode = 404;
-      throw err;
+      // Check whether it exists but expired vs genuinely missing
+      const check = await pool.query(
+        `SELECT status, expires_at FROM gift_transactions WHERE payment_hash = $1 AND sender_id = $2`,
+        [paymentHash, senderId]
+      );
+      if (!check.rows[0]) {
+        throw err('Transaction not found', 404);
+      }
+      if (check.rows[0].status !== 'pending') {
+        throw err(`Transaction is already ${check.rows[0].status}`, 409);
+      }
+      throw err('Invoice has expired. Please create a new tip.', 410);
     }
     return result.rows[0];
   }
