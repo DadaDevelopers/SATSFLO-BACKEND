@@ -23,7 +23,7 @@ class AuthService {
   /**
    * Register a new user
    */
-  async register({ email, password, name, dateOfBirth }) {
+  async register({ email, password, name }) {
     // Check if user exists
     const existing = await pool.query(
       'SELECT id FROM users WHERE email = $1',
@@ -36,18 +36,12 @@ class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const verificationToken = String(Math.floor(100000 + Math.random() * 900000));
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     const result = await pool.query(
-      `INSERT INTO users
-         (email, password_hash, name, date_of_birth, verification_token,
-          verification_expires, email_otp, email_otp_expires, role, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'user', 'active', NOW())
+      `INSERT INTO users (email, password_hash, name, role, status, email_verified, created_at)
+       VALUES ($1, $2, $3, 'user', 'active', true, NOW())
        RETURNING id, email, name, role, created_at`,
-      [email.toLowerCase(), passwordHash, name, dateOfBirth,
-       verificationToken, verificationExpires, verificationToken, emailOtpExpires]
+      [email.toLowerCase(), passwordHash, name]
     );
     const user = result.rows[0];
 
@@ -63,7 +57,7 @@ class AuthService {
       [user.id]
     );
 
-    await emailService.sendOTPEmail(email, name, verificationToken);
+    await emailService.sendWelcomeEmail(email, name);
 
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
@@ -76,7 +70,7 @@ class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        emailVerified: false
+        emailVerified: true
       },
       ...tokens
     };
@@ -212,104 +206,51 @@ class AuthService {
   }
 
   /**
-   * Verify email
-   */
-  async verifyEmail(token) {
-    const result = await pool.query(
-      'SELECT id, email, name, verification_expires FROM users WHERE verification_token = $1',
-      [token]
-    );
-    const user = result.rows[0];
-
-    if (!user) {
-      const err = new Error('Invalid verification token');
-      err.statusCode = 400;
-      throw err;
-    }
-
-    if (new Date(user.verification_expires) < new Date()) {
-      const err = new Error('Verification token expired');
-      err.statusCode = 400;
-      throw err;
-    }
-
-    await pool.query(
-      `UPDATE users
-       SET email_verified = true, verification_token = NULL, verification_expires = NULL
-       WHERE id = $1`,
-      [user.id]
-    );
-
-    await emailService.sendWelcomeEmail(user.email, user.name);
-
-    logger.info('Email verified', { userId: user.id });
-    return { message: 'Email verified successfully' };
-  }
-
-  /**
-   * Resend verification email
-   */
-  async resendVerification(email) {
-    const result = await pool.query(
-      'SELECT id, email, name, email_verified FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-    const user = result.rows[0];
-
-    if (!user) {
-      return { message: 'If an account exists, a verification email has been sent' };
-    }
-
-    if (user.email_verified) {
-      const error = new Error('Email already verified');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const verificationToken = String(Math.floor(100000 + Math.random() * 900000));
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
-
-    await pool.query(
-      'UPDATE users SET verification_token = $1, verification_expires = $2, email_otp = $3, email_otp_expires = $4 WHERE id = $5',
-      [verificationToken, verificationExpires, verificationToken, emailOtpExpires, user.id]
-    );
-
-    await emailService.sendOTPEmail(user.email, user.name, verificationToken);
-
-    return { message: 'Verification email sent' };
-  }
-
-  /**
-   * Verify OTP code
+   * Verify OTP — used only in the forgot-password flow.
+   * Checks users.email_otp, clears it, returns a 15-min reset_token.
    */
   async verifyOtp(email, otp) {
     const result = await pool.query(
-      'SELECT id, email_otp, email_otp_expires, email_verified FROM users WHERE email = $1',
+      'SELECT id, email_otp, email_otp_expires FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
     const user = result.rows[0];
     if (!user) {
-      const err = new Error('User not found'); err.statusCode = 404; throw err;
+      const err = new Error('Invalid OTP'); err.statusCode = 400; throw err;
     }
-    if (user.email_verified) {
-      return { message: 'Email already verified' };
-    }
+
     if (!user.email_otp || user.email_otp !== String(otp)) {
       const err = new Error('Invalid OTP'); err.statusCode = 400; throw err;
     }
+
     if (new Date(user.email_otp_expires) < new Date()) {
-      const err = new Error('OTP has expired'); err.statusCode = 400; throw err;
+      const err = new Error('OTP has expired. Please request a new one.'); err.statusCode = 400; throw err;
     }
+
+    // Clear OTP and issue a short-lived reset token
     await pool.query(
-      'UPDATE users SET email_verified = true, email_otp = NULL, email_otp_expires = NULL, verification_token = NULL WHERE id = $1',
+      'UPDATE users SET email_otp = NULL, email_otp_expires = NULL WHERE id = $1',
       [user.id]
     );
-    return { message: 'Email verified successfully' };
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpires = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Invalidate previous reset tokens then store new one
+    await pool.query(
+      'UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false',
+      [user.id]
+    );
+    await pool.query(
+      'INSERT INTO password_resets (user_id, token, expires_at, created_at) VALUES ($1, $2, $3, NOW())',
+      [user.id, resetToken, resetExpires]
+    );
+
+    return { reset_token: resetToken };
   }
 
   /**
-   * Request password reset
+   * Forgot password — generates a 4-digit OTP stored on the user row.
    */
   async forgotPassword(email) {
     const result = await pool.query(
@@ -318,27 +259,26 @@ class AuthService {
     );
     const user = result.rows[0];
 
-    const response = { message: 'If an account exists, a password reset email has been sent' };
-
+    // Always return same message (security: don't reveal if email exists)
+    const response = { message: 'If an account exists, an OTP has been sent to your email', email };
     if (!user) return response;
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const otp = String(Math.floor(1000 + Math.random() * 9000));
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     await pool.query(
-      `INSERT INTO password_resets (user_id, token, expires_at, created_at)
-       VALUES ($1, $2, $3, NOW())`,
-      [user.id, resetToken, resetExpires]
+      'UPDATE users SET email_otp = $1, email_otp_expires = $2 WHERE id = $3',
+      [otp, otpExpires, user.id]
     );
 
-    await emailService.sendPasswordResetEmail(user.email, user.name, resetToken);
+    await emailService.sendPasswordResetEmail(user.email, user.name, otp);
 
-    logger.info('Password reset requested', { userId: user.id });
+    logger.info('Password reset OTP sent', { userId: user.id });
     return response;
   }
 
   /**
-   * Reset password with token
+   * Reset password using the secure token from verifyResetOtp.
    */
   async resetPassword(token, newPassword) {
     const result = await pool.query(
@@ -348,7 +288,7 @@ class AuthService {
     const resetRecord = result.rows[0];
 
     if (!resetRecord) {
-      const error = new Error('Invalid reset token');
+      const error = new Error('Invalid or expired reset token');
       error.statusCode = 400;
       throw error;
     }

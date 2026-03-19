@@ -1,7 +1,5 @@
 /**
  * Auth Routes
- *
- * Authentication and authorization endpoints
  */
 
 const express = require('express');
@@ -17,151 +15,65 @@ const {
   refreshTokenValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
-  changePasswordValidation,
-  verifyEmailValidation
+  changePasswordValidation
 } = require('../validators/auth.validator');
 
 /**
- * @route   POST /api/v1/auth/register
- * @desc    Register a new user
- * @access  Public
+ * POST /api/v1/auth/register
+ * Body: { name, email, password, confirm_password }
  */
-router.post(
-  '/register',
-  registrationLimiter,
-  registerValidation,
-  validate,
-  authController.register
-);
+router.post('/register', registrationLimiter, registerValidation, validate, authController.register);
 
 /**
- * @route   POST /api/v1/auth/login
- * @desc    Login user
- * @access  Public
+ * POST /api/v1/auth/login
+ * Body: { email, password }
  */
-router.post(
-  '/login',
-  authLimiter,
-  loginValidation,
-  validate,
-  authController.login
-);
+router.post('/login', authLimiter, loginValidation, validate, authController.login);
 
 /**
- * @route   POST /api/v1/auth/refresh
- * @desc    Refresh access token
- * @access  Public
+ * POST /api/v1/auth/forgot-password
+ * Body: { email } — sends 4-digit OTP to email
  */
-router.post(
-  '/refresh',
-  refreshTokenValidation,
-  validate,
-  authController.refreshToken
-);
+router.post('/forgot-password', passwordResetLimiter, forgotPasswordValidation, validate, authController.forgotPassword);
 
 /**
- * @route   POST /api/v1/auth/logout
- * @desc    Logout user
- * @access  Private
- */
-router.post(
-  '/logout',
-  authenticateToken,
-  authController.logout
-);
-
-/**
- * @route   POST /api/v1/auth/logout-all
- * @desc    Logout from all devices
- * @access  Private
- */
-router.post(
-  '/logout-all',
-  authenticateToken,
-  authController.logoutAll
-);
-
-/**
- * @route   GET /api/v1/auth/verify-email?token=  (deep-link / query param)
- * @route   GET /api/v1/auth/verify-email/:token  (path param — kept for backwards compat)
- * @desc    Verify email address
- * @access  Public
- */
-router.get('/verify-email', authController.verifyEmail);
-router.get(
-  '/verify-email/:token',
-  verifyEmailValidation,
-  validate,
-  authController.verifyEmail
-);
-
-/**
- * @route   POST /api/v1/auth/resend-verification
- * @desc    Resend verification email
- * @access  Public
- */
-router.post(
-  '/resend-verification',
-  authLimiter,
-  forgotPasswordValidation, // Same validation - just email
-  validate,
-  authController.resendVerification
-);
-
-/**
- * @route   POST /api/v1/auth/verify-otp
- * @desc    Verify email with 6-digit OTP
- * @access  Public
+ * POST /api/v1/auth/verify-otp
+ * Body: { email, otp } — verifies OTP, returns { reset_token }
  */
 router.post('/verify-otp', authLimiter, authController.verifyOtp);
 
 /**
- * @route   POST /api/v1/auth/forgot-password
- * @desc    Request password reset
- * @access  Public
+ * POST /api/v1/auth/reset-password/:token
+ * Body: { password, confirm_password }
  */
-router.post(
-  '/forgot-password',
-  passwordResetLimiter,
-  forgotPasswordValidation,
-  validate,
-  authController.forgotPassword
-);
+router.post('/reset-password/:token', resetPasswordValidation, validate, authController.resetPassword);
 
 /**
- * @route   POST /api/v1/auth/reset-password/:token
- * @desc    Reset password with token
- * @access  Public
+ * POST /api/v1/auth/refresh
+ * Body: { refreshToken }
  */
-router.post(
-  '/reset-password/:token',
-  resetPasswordValidation,
-  validate,
-  authController.resetPassword
-);
+router.post('/refresh', refreshTokenValidation, validate, authController.refreshToken);
 
 /**
- * @route   PUT /api/v1/auth/change-password
- * @desc    Change password (authenticated)
- * @access  Private
+ * POST /api/v1/auth/logout
+ * Body: { refreshToken }
  */
-router.put(
-  '/change-password',
-  authenticateToken,
-  changePasswordValidation,
-  validate,
-  authController.changePassword
-);
+router.post('/logout', authenticateToken, authController.logout);
 
 /**
- * @route   GET /api/v1/auth/me
- * @desc    Get current authenticated user
- * @access  Private
+ * POST /api/v1/auth/logout-all
  */
-router.get(
-  '/me',
-  authenticateToken,
-  authController.getCurrentUser
-);
+router.post('/logout-all', authenticateToken, authController.logoutAll);
+
+/**
+ * PUT /api/v1/auth/change-password
+ * Body: { currentPassword, newPassword }
+ */
+router.put('/change-password', authenticateToken, changePasswordValidation, validate, authController.changePassword);
+
+/**
+ * GET /api/v1/auth/me
+ */
+router.get('/me', authenticateToken, authController.getCurrentUser);
 
 module.exports = router;

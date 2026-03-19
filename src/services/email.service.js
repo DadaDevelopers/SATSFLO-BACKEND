@@ -9,7 +9,10 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: 'resend',
     pass: process.env.RESEND_API_KEY || process.env.SMTP_PASS
-  }
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 transporter.verify((error) => {

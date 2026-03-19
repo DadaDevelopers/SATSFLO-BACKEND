@@ -25,7 +25,7 @@ Node.js · Express · PostgreSQL · JWT Auth · LNURL-pay · Resend Email
 
 SatsFlo is a menstrual health tracking app that rewards users with Bitcoin (sats) for logging consistently. The backend provides REST API endpoints for:
 
-- User auth (register, login, email OTP verification, password reset)
+- User auth (register, login, forgot-password OTP flow, password reset)
 - Cycle tracking (profiles, logs, phases, predictions)
 - Daily health logging (symptoms, moods, water, journal)
 - Community (threads, comments, likes, notifications)
@@ -195,34 +195,37 @@ All protected endpoints require:
 Authorization: Bearer <accessToken>
 ```
 
-### Register + OTP verify
+### Register
 ```
-POST /api/v1/auth/register          { name, email, password, date_of_birth? }
-  → 6-digit OTP sent to email
-POST /api/v1/auth/verify-otp        { email, otp }
-  → account activated
+POST /api/v1/auth/register          { name, email, password, confirm_password }
+  → welcome email sent
+  → { user: { ..., emailVerified: true }, accessToken, refreshToken }
 ```
 
-### Login / token lifecycle
+### Login
 ```
 POST /api/v1/auth/login             { email, password }
-  → { access_token, refresh_token, user }
+  → { user, accessToken, refreshToken }
 
-POST /api/v1/auth/refresh           { refresh_token }
-  → { access_token, refresh_token }
+POST /api/v1/auth/refresh           { refreshToken }
+  → { accessToken, refreshToken }
 
-POST /api/v1/auth/logout            { refresh_token }
-  → revokes refresh token
+POST /api/v1/auth/logout            { refreshToken }   [auth]
+POST /api/v1/auth/logout-all                           [auth]
 ```
 
-### Password reset
+### Forgot password (only OTP flow)
 ```
 POST /api/v1/auth/forgot-password   { email }
-  → reset link sent to email (expires 1 h)
+  → 4-digit OTP sent to email (valid 10 min)
 
-POST /api/v1/auth/reset-password    { token, new_password }
+POST /api/v1/auth/verify-otp        { email, otp }
+  → { reset_token }  (valid 15 min)
 
-PUT  /api/v1/auth/change-password   { current_password, new_password }   [auth]
+POST /api/v1/auth/reset-password/:token   { password, confirm_password }
+  → password updated, all sessions revoked
+
+PUT  /api/v1/auth/change-password   { currentPassword, newPassword }   [auth]
 ```
 
 ---
@@ -320,16 +323,16 @@ Response envelope:
 ### Auth
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| POST | `/auth/register` | — | |
-| POST | `/auth/login` | — | |
-| POST | `/auth/refresh` | — | |
-| POST | `/auth/logout` | ✓ | |
-| GET | `/auth/verify-email` | — | query: `token` |
-| POST | `/auth/verify-otp` | — | body: `{ email, otp }` |
-| POST | `/auth/forgot-password` | — | |
-| POST | `/auth/reset-password` | — | |
-| PUT | `/auth/change-password` | ✓ | |
-| POST | `/auth/resend-verification` | — | |
+| POST | `/auth/register` | — | body: `name, email, password, confirm_password` |
+| POST | `/auth/login` | — | body: `email, password` |
+| POST | `/auth/refresh` | — | body: `refreshToken` |
+| POST | `/auth/logout` | ✓ | body: `refreshToken` |
+| POST | `/auth/logout-all` | ✓ | |
+| POST | `/auth/forgot-password` | — | sends 4-digit OTP |
+| POST | `/auth/verify-otp` | — | body: `{ email, otp }` → `{ reset_token }` |
+| POST | `/auth/reset-password/:token` | — | body: `password, confirm_password` |
+| PUT | `/auth/change-password` | ✓ | body: `currentPassword, newPassword` |
+| GET | `/auth/me` | ✓ | |
 
 ### Users
 | Method | Path | Auth | Notes |
