@@ -1,37 +1,41 @@
 /**
  * Auth Controller
- *
- * Handles authentication endpoints
  */
 
 const authService = require('../../services/auth.service');
 const ApiResponse = require('../../utils/response');
-const logger = require('../../utils/logger');
 
 /**
- * Register new user
  * POST /api/v1/auth/register
+ * Body: { name, email, password, confirm_password }
  */
 const register = async (req, res, next) => {
   try {
-    const { email, password, name, dateOfBirth } = req.body;
+    const { email, password, confirm_password, name } = req.body;
 
-    const result = await authService.register({
-      email,
-      password,
-      name,
-      dateOfBirth
-    });
+    if (!name || !email || !password || !confirm_password) {
+      return ApiResponse.validationError(res, [
+        { field: 'required', message: 'name, email, password, and confirm_password are required' }
+      ]);
+    }
 
-    return ApiResponse.created(res, result, 'Registration successful. Please verify your email.');
+    if (password !== confirm_password) {
+      return ApiResponse.validationError(res, [
+        { field: 'confirm_password', message: 'Passwords do not match' }
+      ]);
+    }
+
+    const result = await authService.register({ email, password, name });
+
+    return ApiResponse.created(res, result, 'Account created successfully');
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Login user
  * POST /api/v1/auth/login
+ * Body: { email, password }
  */
 const login = async (req, res, next) => {
   try {
@@ -46,8 +50,8 @@ const login = async (req, res, next) => {
 };
 
 /**
- * Refresh access token
  * POST /api/v1/auth/refresh
+ * Body: { refreshToken }
  */
 const refreshToken = async (req, res, next) => {
   try {
@@ -62,8 +66,8 @@ const refreshToken = async (req, res, next) => {
 };
 
 /**
- * Logout user
  * POST /api/v1/auth/logout
+ * Body: { refreshToken }
  */
 const logout = async (req, res, next) => {
   try {
@@ -78,7 +82,6 @@ const logout = async (req, res, next) => {
 };
 
 /**
- * Logout from all devices
  * POST /api/v1/auth/logout-all
  */
 const logoutAll = async (req, res, next) => {
@@ -92,44 +95,8 @@ const logoutAll = async (req, res, next) => {
 };
 
 /**
- * Verify email
- * GET /api/v1/auth/verify-email/:token
- */
-const verifyEmail = async (req, res, next) => {
-  try {
-    const token = req.params.token || req.query.token;
-
-    if (!token) {
-      return res.status(400).json({ success: false, message: 'Verification token is required' });
-    }
-
-    const result = await authService.verifyEmail(token);
-
-    return ApiResponse.success(res, result, 'Email verified successfully');
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Resend verification email
- * POST /api/v1/auth/resend-verification
- */
-const resendVerification = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    const result = await authService.resendVerification(email);
-
-    return ApiResponse.success(res, result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Request password reset
  * POST /api/v1/auth/forgot-password
+ * Body: { email }
  */
 const forgotPassword = async (req, res, next) => {
   try {
@@ -144,42 +111,59 @@ const forgotPassword = async (req, res, next) => {
 };
 
 /**
- * Reset password with token
- * POST /api/v1/auth/reset-password/:token
- */
-const resetPassword = async (req, res, next) => {
-  try {
-    const { token } = req.params;
-    const { password } = req.body;
-
-    const result = await authService.resetPassword(token, password);
-
-    return ApiResponse.success(res, result, 'Password reset successfully');
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Verify OTP code
  * POST /api/v1/auth/verify-otp
+ * Body: { email, otp }
+ * Returns: { reset_token }
  */
 const verifyOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
     if (!email || !otp) {
-      return res.status(400).json({ success: false, message: 'email and otp are required' });
+      return ApiResponse.validationError(res, [
+        { field: 'required', message: 'email and otp are required' }
+      ]);
     }
+
     const result = await authService.verifyOtp(email, String(otp));
-    return ApiResponse.success(res, result, 'Email verified successfully');
+
+    return ApiResponse.success(res, result, 'OTP verified. Use the reset_token to set your new password.');
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Change password (authenticated)
+ * POST /api/v1/auth/reset-password/:token
+ * Body: { password, confirm_password }
+ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const token = req.params.token;
+    const { password, confirm_password } = req.body;
+
+    if (!token || !password || !confirm_password) {
+      return ApiResponse.validationError(res, [
+        { field: 'required', message: 'token, password, and confirm_password are required' }
+      ]);
+    }
+
+    if (password !== confirm_password) {
+      return ApiResponse.validationError(res, [
+        { field: 'confirm_password', message: 'Passwords do not match' }
+      ]);
+    }
+
+    const result = await authService.resetPassword(token, password);
+
+    return ApiResponse.success(res, result, 'Password reset successfully. Please log in.');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PUT /api/v1/auth/change-password
+ * Body: { currentPassword, newPassword }
  */
 const changePassword = async (req, res, next) => {
   try {
@@ -198,7 +182,6 @@ const changePassword = async (req, res, next) => {
 };
 
 /**
- * Get current user
  * GET /api/v1/auth/me
  */
 const getCurrentUser = async (req, res, next) => {
@@ -219,10 +202,8 @@ module.exports = {
   refreshToken,
   logout,
   logoutAll,
-  verifyEmail,
-  verifyOtp,
-  resendVerification,
   forgotPassword,
+  verifyOtp,
   resetPassword,
   changePassword,
   getCurrentUser

@@ -8,22 +8,16 @@ const { body, param } = require('express-validator');
 const { PASSWORD_REQUIREMENTS } = require('../utils/constants');
 
 /**
- * Password validation helper
- */
-const passwordRules = body('password')
-  .isLength({ min: PASSWORD_REQUIREMENTS.MIN_LENGTH, max: PASSWORD_REQUIREMENTS.MAX_LENGTH })
-  .withMessage(`Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`)
-  .matches(/[a-z]/)
-  .withMessage('Password must contain at least one lowercase letter')
-  .matches(/[A-Z]/)
-  .withMessage('Password must contain at least one uppercase letter')
-  .matches(/\d/)
-  .withMessage('Password must contain at least one number');
-
-/**
  * Register validation
  */
 const registerValidation = [
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Name is required')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email address')
@@ -41,39 +35,15 @@ const registerValidation = [
     .matches(/\d/)
     .withMessage('Password must contain at least one number'),
 
-  body('confirmPassword')
+  body('confirm_password')
+    .notEmpty()
+    .withMessage('confirm_password is required')
     .custom((value, { req }) => {
       if (value !== req.body.password) {
         throw new Error('Passwords do not match');
       }
       return true;
-    }),
-
-  body('name')
-    .optional()
-    .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Name must be between 2 and 100 characters')
-    .matches(/^[a-zA-Z\s'-]+$/)
-    .withMessage('Name can only contain letters, spaces, hyphens, and apostrophes'),
-
-  body('dateOfBirth')
-    .optional()
-    .isISO8601()
-    .withMessage('Date of birth must be a valid date')
-    .custom((value) => {
-      const dob = new Date(value);
-      const minAge = new Date();
-      minAge.setFullYear(minAge.getFullYear() - 13);
-      if (dob > minAge) {
-        throw new Error('You must be at least 13 years old to register');
-      }
-      return true;
-    }),
-
-  body('acceptTerms')
-    .equals('true')
-    .withMessage('You must accept the terms and conditions')
+    })
 ];
 
 /**
@@ -112,14 +82,12 @@ const forgotPasswordValidation = [
 ];
 
 /**
- * Reset password validation
+ * Reset password validation (/:token path param)
  */
 const resetPasswordValidation = [
   param('token')
     .notEmpty()
-    .withMessage('Reset token is required')
-    .isLength({ min: 32, max: 64 })
-    .withMessage('Invalid reset token'),
+    .withMessage('Reset token is required'),
 
   body('password')
     .isLength({ min: PASSWORD_REQUIREMENTS.MIN_LENGTH, max: PASSWORD_REQUIREMENTS.MAX_LENGTH })
@@ -131,7 +99,9 @@ const resetPasswordValidation = [
     .matches(/\d/)
     .withMessage('Password must contain at least one number'),
 
-  body('confirmPassword')
+  body('confirm_password')
+    .notEmpty()
+    .withMessage('confirm_password is required')
     .custom((value, { req }) => {
       if (value !== req.body.password) {
         throw new Error('Passwords do not match');
@@ -162,26 +132,16 @@ const changePasswordValidation = [
         throw new Error('New password must be different from current password');
       }
       return true;
-    }),
-
-  body('confirmNewPassword')
-    .custom((value, { req }) => {
-      if (value !== req.body.newPassword) {
-        throw new Error('Passwords do not match');
-      }
-      return true;
     })
 ];
 
 /**
- * Verify email validation
+ * Verify email validation (link-based, path param)
  */
 const verifyEmailValidation = [
   param('token')
     .notEmpty()
     .withMessage('Verification token is required')
-    .isLength({ min: 32, max: 64 })
-    .withMessage('Invalid verification token')
 ];
 
 module.exports = {

@@ -101,13 +101,14 @@ POST /auth/register
 
 ```ts
 body: {
-  name: string;           // 2–100 chars
+  name: string;             // 2–100 chars
   email: string;
-  password: string;       // min 8 chars, 1 uppercase, 1 number, 1 special
+  password: string;         // min 8 chars, 1 uppercase, 1 number
+  confirm_password: string;
 }
 
 response.data: {
-  user: { id, name, email, role, email_verified, created_at };
+  user: { id, name, email, role, emailVerified: true };
   accessToken: string;
   refreshToken: string;
 }
@@ -128,7 +129,7 @@ body: {
 }
 
 response.data: {
-  user: { id, name, email, role, email_verified, last_login };
+  user: { id, name, email, role, emailVerified, last_login };
   accessToken: string;
   refreshToken: string;
 }
@@ -164,32 +165,25 @@ body: { refreshToken: string }
 // no body needed
 ```
 
-### Email Verification
+### Forgot Password
 
 ```
-// OTP flow (preferred):
-// 1. After registration, a 6-digit OTP is sent to the user's email
-// 2. User enters the code in the app, which calls:
-POST /auth/verify-otp
-body: { email: string; otp: string }   — 6-digit code sent to email at registration
-
-// Deep-link flow (legacy, still supported):
-GET  /auth/verify-email/:token           — token as path param
-GET  /auth/verify-email?token=TOKEN      — token as query param
-
-POST /auth/resend-verification           — resend OTP (body: { email })
-```
-
-### Password Reset
-
-```
+// Step 1 — request OTP
 POST /auth/forgot-password
 body: { email: string }
+response.data: { message, email }
 
-// Deep-link flow: satsflo:///reset-password?token=TOKEN → Expo reads token → calls:
-POST /auth/reset-password/:token          — token as path param, body: { password: string }
+// Step 2 — verify 4-digit OTP
+POST /auth/verify-otp
+body: { email: string; otp: string }   — 4-digit code, valid 10 min
+response.data: { reset_token: string } — valid 15 min
 
-POST /auth/change-password   — auth required
+// Step 3 — set new password
+POST /auth/reset-password/:token
+body: { password: string; confirm_password: string }
+
+// Change password (authenticated)
+PUT /auth/change-password   — auth required
 body: { currentPassword: string; newPassword: string }
 ```
 
@@ -824,6 +818,6 @@ export async function logout() {
 - Community read endpoints (`GET /threads`, `GET /threads/:id`) work without auth — pass the token if the user is logged in to get personalised data (e.g. `is_liked`).
 - Rate limits are stricter on health/auth routes — avoid aggressive polling.
 - The `cycle-profile` endpoint (`POST /cycle-profile`) is an upsert — safe to call on every onboarding save.
-- OTP codes are 6 digits, valid for 10 minutes. Sent to email on registration and resend-verification.
+- OTP codes (forgot-password flow only) are 4 digits, valid 10 minutes. After verification a `reset_token` valid 15 minutes is returned.
 - Tips require the recipient to have set a `lightning_address` on their profile.
 - Set `ALLOWED_ORIGINS=https://yourapp.com` in `.env` for production CORS.

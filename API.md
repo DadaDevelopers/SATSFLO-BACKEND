@@ -47,28 +47,28 @@ Access tokens expire in `15m`. Refresh with `POST /auth/refresh`. Refresh tokens
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/auth/register` | — | Create account. Sends OTP to email. Body: `email, password, name, dateOfBirth?` |
+| `POST` | `/auth/register` | — | Create account. Sends welcome email. Body: `name, email, password, confirm_password` |
 | `POST` | `/auth/login` | — | Login. Body: `email, password` |
 | `POST` | `/auth/refresh` | — | Swap refresh token for new pair. Body: `refreshToken` |
 | `POST` | `/auth/logout` | ✓ | Revoke current device refresh token. Body: `refreshToken` |
 | `POST` | `/auth/logout-all` | ✓ | Revoke all refresh tokens for this user |
-| `POST` | `/auth/verify-otp` | — | Verify email with 6-digit OTP. Body: `email, otp` |
-| `GET`  | `/auth/verify-email?token=` | — | Verify email via link (query param) |
-| `GET`  | `/auth/verify-email/:token` | — | Verify email via link (path param) |
-| `POST` | `/auth/resend-verification` | — | Resend OTP. Body: `email` |
-| `POST` | `/auth/forgot-password` | — | Request reset email. Body: `email` |
-| `POST` | `/auth/reset-password/:token` | — | Reset password. Body: `password`. Token from email link. |
+| `POST` | `/auth/forgot-password` | — | Send 4-digit OTP to email. Body: `email` |
+| `POST` | `/auth/verify-otp` | — | Verify 4-digit OTP (forgot-password flow only). Body: `email, otp` → returns `{ reset_token }` |
+| `POST` | `/auth/reset-password/:token` | — | Reset password. Path: `token`. Body: `password, confirm_password` |
 | `PUT`  | `/auth/change-password` | ✓ | Change password. Body: `currentPassword, newPassword` |
 | `GET`  | `/auth/me` | ✓ | Returns `{ id, email, role }` for the authenticated user |
 
 **Auth response** (register & login):
 ```
-{ user: { id, email, name, role, emailVerified }, accessToken, refreshToken, expiresIn }
+{ user: { id, email, name, role, emailVerified: true }, accessToken, refreshToken, expiresIn }
 ```
 
-**Deep-link flow for verify/reset:**
-Email contains `satsflo:///verify-email?token=` or `satsflo:///reset-password?token=`.
-App extracts token from URL → calls the respective endpoint.
+**Forgot password flow:**
+```
+POST /auth/forgot-password   { email }            → 4-digit OTP sent to email
+POST /auth/verify-otp        { email, otp }        → { reset_token }  (valid 15 min)
+POST /auth/reset-password/:token  { password, confirm_password }
+```
 
 ---
 
@@ -435,6 +435,6 @@ GET  /payments/status/:hash →  poll to confirm (optional)
 - All dates: `YYYY-MM-DD`. All timestamps: ISO 8601 UTC.
 - Upsert endpoints (`PUT /logs/:date`, `PUT /water-settings`, `POST /cycle-profile`) are safe to call multiple times — they create if missing, update if exists.
 - Health fields (`health_conditions`, `medications`, `notes`) are encrypted at rest with AES-256-GCM. Returned decrypted — no client-side work needed.
-- `email_otp` is a 6-digit code, valid 10 minutes. Resend via `POST /auth/resend-verification`.
+- OTP codes (forgot-password flow only) are 4 digits, valid 10 minutes. After verification, a `reset_token` valid for 15 minutes is returned.
 - Lightning invoices expire in 10 minutes. After expiry `GET /payments/status` returns `status: failed`.
 - `POST /payments/confirm` is scoped to `sender_id` — users can only confirm their own outgoing payments.
