@@ -24,6 +24,9 @@ const app = express();
 const API_VERSION = process.env.API_VERSION || 'v1';
 const API_BASE_PATH = `/api/${API_VERSION}`;
 
+// Trust proxy — required on Render/Heroku so rate limiter reads real client IP
+app.set('trust proxy', 1);
+
 // ==================== SECURITY MIDDLEWARE ====================
 
 // Helmet - Security headers
