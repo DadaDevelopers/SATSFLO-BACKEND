@@ -1,34 +1,14 @@
 'use strict';
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.resend.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: 'resend',
-    pass: process.env.RESEND_API_KEY || process.env.SMTP_PASS
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
-
-transporter.verify((error) => {
-  if (error) {
-    console.error('Email service error:', error.message);
-  } else {
-    console.log('Email service ready');
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM        = 'SatsFlo <info@satsflo.app>';
-const DEEP_LINK   = process.env.DEEP_LINK_URL || process.env.FRONTEND_URL || 'https://satsflo.app';
 const BRAND_COLOR = '#FF4081';
 const YEAR        = new Date().getFullYear();
 
-// ─── Shared layout ────────────────────────────────────────────────────────────
+// ─── Shared layout ─────────────────────────────────────────────────────────────
 
 function layout(title, bodyHtml) {
   return `<!DOCTYPE html>
@@ -90,64 +70,26 @@ function layout(title, bodyHtml) {
 </html>`;
 }
 
-function button(href, label) {
-  return `
-    <table cellpadding="0" cellspacing="0" style="margin:28px 0;">
-      <tr>
-        <td style="background:${BRAND_COLOR};border-radius:10px;">
-          <a href="${href}"
-             style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;
-                    font-weight:600;text-decoration:none;letter-spacing:0.2px;">
-            ${label}
-          </a>
-        </td>
-      </tr>
-    </table>`;
-}
-
 function divider() {
   return `<hr style="border:none;border-top:1px solid #F3F4F6;margin:24px 0;" />`;
 }
 
-function smallLink(label, href) {
-  return `<p style="margin:8px 0 0;font-size:13px;color:#6B7280;">
-    Or copy this link into your browser:<br/>
-    <a href="${href}" style="color:${BRAND_COLOR};word-break:break-all;font-size:12px;">${href}</a>
-  </p>`;
+// ─── Send helper ───────────────────────────────────────────────────────────────
+
+async function send({ to, subject, html }) {
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: [to],
+    subject,
+    html,
+  });
+  if (error) {
+    const err = new Error(error.message || 'Email send failed');
+    throw err;
+  }
 }
 
-// ─── 1. Verification email (link-based) ─────────────────────────────────────
-
-const sendVerificationEmail = async (email, name, token) => {
-  const link = `${DEEP_LINK}/verify-email?token=${token}`;
-
-  const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
-      Verify your email address
-    </h1>
-    <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi <strong>${name}</strong>, welcome to SatsFlo! <br/><br/>
-      You're one step away from tracking your cycle and earning Bitcoin rewards.
-      Please verify your email address to activate your account.
-    </p>
-    ${button(link, 'Verify My Email')}
-    ${smallLink('Verify my email', link)}
-    ${divider()}
-    <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
-      This link expires in <strong>24 hours</strong>. If you didn't create a SatsFlo account,
-      you can safely ignore this email.
-    </p>
-  `;
-
-  await transporter.sendMail({
-    from: FROM,
-    to: email,
-    subject: 'Verify your SatsFlo email address',
-    html: layout('Verify your SatsFlo email', body)
-  });
-};
-
-// ─── 2. OTP email (6-digit code) ────────────────────────────────────────────
+// ─── 1. OTP email (forgot-password) ───────────────────────────────────────────
 
 const sendOTPEmail = async (email, name, otp) => {
   const digits = String(otp).split('');
@@ -162,11 +104,11 @@ const sendOTPEmail = async (email, name, otp) => {
 
   const body = `
     <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
-      Your verification code
+      Your password reset code
     </h1>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
       Hi <strong>${name}</strong>,<br/><br/>
-      Use the code below to verify your SatsFlo account.
+      Use the code below to reset your SatsFlo password.
       Enter it in the app within the next 10 minutes.
     </p>
 
@@ -185,56 +127,14 @@ const sendOTPEmail = async (email, name, otp) => {
     </p>
   `;
 
-  await transporter.sendMail({
-    from: FROM,
+  await send({
     to: email,
-    subject: 'Your SatsFlo verification code',
-    html: layout('Your SatsFlo verification code', body)
+    subject: 'Your SatsFlo password reset code',
+    html: layout('Your SatsFlo password reset code', body),
   });
 };
 
-// ─── 3. Password reset ───────────────────────────────────────────────────────
-
-const sendPasswordResetEmail = async (email, name, token) => {
-  const link = `${DEEP_LINK}/reset-password?token=${token}`;
-
-  const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
-      Reset your password
-    </h1>
-    <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi <strong>${name}</strong>,<br/><br/>
-      We received a request to reset the password for your SatsFlo account.
-      Click the button below to choose a new password.
-    </p>
-    ${button(link, 'Reset My Password')}
-    ${smallLink('Reset my password', link)}
-    ${divider()}
-    <table cellpadding="0" cellspacing="0" style="width:100%;background:#FFF7ED;border-radius:10px;margin-top:4px;">
-      <tr>
-        <td style="padding:16px 20px;">
-          <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#92400E;">
-            Security notice
-          </p>
-          <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
-            This link expires in <strong>1 hour</strong>.
-            If you did not request a password reset, please ignore this email —
-            your password will remain unchanged and your account is safe.
-          </p>
-        </td>
-      </tr>
-    </table>
-  `;
-
-  await transporter.sendMail({
-    from: FROM,
-    to: email,
-    subject: 'Reset your SatsFlo password',
-    html: layout('Reset your SatsFlo password', body)
-  });
-};
-
-// ─── 4. Welcome email (post-verification) ───────────────────────────────────
+// ─── 2. Welcome email ──────────────────────────────────────────────────────────
 
 const sendWelcomeEmail = async (email, name) => {
   const steps = [
@@ -265,7 +165,7 @@ const sendWelcomeEmail = async (email, name) => {
       You're all set, ${name}! 🎉
     </h1>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
-      Your email is verified and your SatsFlo account is ready.
+      Your SatsFlo account is ready.
       Here's how to get the most out of the app:
     </p>
 
@@ -280,18 +180,17 @@ const sendWelcomeEmail = async (email, name) => {
     </p>
   `;
 
-  await transporter.sendMail({
-    from: FROM,
+  await send({
     to: email,
-    subject: 'Welcome to SatsFlo — you\'re all set!',
-    html: layout('Welcome to SatsFlo', body)
+    subject: "Welcome to SatsFlo — you're all set!",
+    html: layout('Welcome to SatsFlo', body),
   });
 };
 
 module.exports = {
-  sendVerificationEmail,
   sendOTPEmail,
-  sendPasswordResetEmail,
   sendWelcomeEmail,
-  initialize: () => Promise.resolve()
+  // alias used by forgotPassword service
+  sendPasswordResetEmail: sendOTPEmail,
+  initialize: () => Promise.resolve(),
 };
