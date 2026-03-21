@@ -137,52 +137,49 @@ const sendOTPEmail = async (email, name, otp) => {
 // ─── 2. Welcome email ──────────────────────────────────────────────────────────
 
 const sendWelcomeEmail = async (email, name) => {
-  const steps = [
-    ['🌸', 'Log your last period', 'Set up your cycle profile so SatsFlo can track your health journey.'],
-    ['⚡', 'Connect your Bitcoin wallet', 'Add your Lightning address to receive sats rewards for logging consistently.'],
-    ['💬', 'Join the community', 'Connect with others, share insights, and support each other anonymously.'],
-  ].map(([icon, title, desc]) => `
-    <tr>
-      <td style="padding:0 0 20px;">
-        <table cellpadding="0" cellspacing="0" style="width:100%;">
-          <tr>
-            <td style="width:44px;vertical-align:top;">
-              <div style="width:40px;height:40px;background:#FFF7ED;border-radius:10px;
-                          text-align:center;line-height:40px;font-size:20px;">${icon}</div>
-            </td>
-            <td style="padding-left:14px;vertical-align:top;">
-              <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">${title}</p>
-              <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.5;">${desc}</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  `).join('');
+  const firstName = name ? name.split(' ')[0] : name;
 
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
-      You're all set, ${name}! 🎉
+    <h1 style="margin:0 0 16px;font-size:26px;font-weight:700;color:#111827;">
+      Hi ${firstName}, welcome to SatsFlo!
     </h1>
-    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
-      Your SatsFlo account is ready.
-      Here's how to get the most out of the app:
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.7;">
+      We're so glad you're here. SatsFlo helps you track your cycle, understand your body,
+      and earn Bitcoin Lightning rewards for staying consistent with your health journey.
     </p>
-
-    <table cellpadding="0" cellspacing="0" style="width:100%;background:#F9FAFB;border-radius:12px;padding:20px 20px 0;">
-      <tr><td><table cellpadding="0" cellspacing="0" style="width:100%;">${steps}</table></td></tr>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.7;">
+      Here's what you can do next:
+    </p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 24px;">
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #F3F4F6;">
+          <p style="margin:0;font-size:14px;color:#111827;font-weight:600;">Log your last period</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6B7280;">Set your cycle profile so we can start tracking for you.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #F3F4F6;">
+          <p style="margin:0;font-size:14px;color:#111827;font-weight:600;">Add your Lightning address</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6B7280;">Receive Bitcoin rewards directly to your wallet for logging consistently.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;">
+          <p style="margin:0;font-size:14px;color:#111827;font-weight:600;">Join the community</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6B7280;">Connect with others and share your health journey.</p>
+        </td>
+      </tr>
     </table>
-
     ${divider()}
     <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;text-align:center;">
       Your health, your data, your rewards.<br/>
-      <strong style="color:#111827;">Welcome to SatsFlo.</strong>
+      <strong style="color:#111827;">The SatsFlo Team</strong>
     </p>
   `;
 
   await send({
     to: email,
-    subject: "Welcome to SatsFlo — you're all set!",
+    subject: `Welcome to SatsFlo, ${firstName}!`,
     html: layout('Welcome to SatsFlo', body),
   });
 };

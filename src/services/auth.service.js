@@ -71,10 +71,10 @@ class AuthService {
       [user.id]
     );
 
-    // Fire-and-forget — don't block registration if email fails
-    emailService.sendWelcomeEmail(email, name).catch(err =>
-      logger.error('Welcome email failed', { error: err.message })
-    );
+    // Non-blocking — registration succeeds even if email fails
+    emailService.sendWelcomeEmail(email, name)
+      .then(() => logger.info('Welcome email sent', { userId: user.id }))
+      .catch(err => logger.error('Welcome email failed', { error: err.message, userId: user.id }));
 
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
