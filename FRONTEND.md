@@ -818,6 +818,6 @@ export async function logout() {
 - Community read endpoints (`GET /threads`, `GET /threads/:id`) work without auth — pass the token if the user is logged in to get personalised data (e.g. `is_liked`).
 - Rate limits are stricter on health/auth routes — avoid aggressive polling.
 - The `cycle-profile` endpoint (`POST /cycle-profile`) is an upsert — safe to call on every onboarding save.
-- OTP codes (forgot-password flow only) are 4 digits, valid 10 minutes. After verification a `reset_token` valid 15 minutes is returned.
+- OTP codes (forgot-password flow only) are 6 digits, valid 10 minutes. After verification a `reset_token` valid 15 minutes is returned. Max 3 OTP requests per email per hour.
 - Tips require the recipient to have set a `lightning_address` on their profile.
 - Set `ALLOWED_ORIGINS=https://yourapp.com` in `.env` for production CORS.

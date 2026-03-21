@@ -435,6 +435,6 @@ GET  /payments/status/:hash →  poll to confirm (optional)
 - All dates: `YYYY-MM-DD`. All timestamps: ISO 8601 UTC.
 - Upsert endpoints (`PUT /logs/:date`, `PUT /water-settings`, `POST /cycle-profile`) are safe to call multiple times — they create if missing, update if exists.
 - Health fields (`health_conditions`, `medications`, `notes`) are encrypted at rest with AES-256-GCM. Returned decrypted — no client-side work needed.
-- OTP codes (forgot-password flow only) are 4 digits, valid 10 minutes. After verification, a `reset_token` valid for 15 minutes is returned.
+- OTP codes (forgot-password flow only) are 6 digits, valid 10 minutes. After verification, a `reset_token` valid for 15 minutes is returned. Max 3 OTP requests per email per hour.
 - Lightning invoices expire in 10 minutes. After expiry `GET /payments/status` returns `status: failed`.
 - `POST /payments/confirm` is scoped to `sender_id` — users can only confirm their own outgoing payments.

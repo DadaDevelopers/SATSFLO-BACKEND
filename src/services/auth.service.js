@@ -19,6 +19,20 @@ const logger = require('../utils/logger');
 
 const SALT_ROUNDS = 12;
 
+// In-memory per-email OTP rate limit: max 3 requests per hour
+// Works correctly on single-instance deploys (Render free tier)
+const otpRateLimitMap = new Map();
+function checkOtpRateLimit(email) {
+  const now = Date.now();
+  const WINDOW_MS = 60 * 60 * 1000; // 1 hour
+  const MAX_REQUESTS = 3;
+  const timestamps = (otpRateLimitMap.get(email) || []).filter(t => now - t < WINDOW_MS);
+  if (timestamps.length >= MAX_REQUESTS) return false;
+  timestamps.push(now);
+  otpRateLimitMap.set(email, timestamps);
+  return true;
+}
+
 class AuthService {
   /**
    * Register a new user
@@ -57,7 +71,10 @@ class AuthService {
       [user.id]
     );
 
-    await emailService.sendWelcomeEmail(email, name);
+    // Fire-and-forget — don't block registration if email fails
+    emailService.sendWelcomeEmail(email, name).catch(err =>
+      logger.error('Welcome email failed', { error: err.message })
+    );
 
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
@@ -206,7 +223,7 @@ class AuthService {
   }
 
   /**
-   * Verify OTP — used only in the forgot-password flow.
+   * Verify 6-digit OTP — used only in the forgot-password flow.
    * Checks users.email_otp, clears it, returns a 15-min reset_token.
    */
   async verifyOtp(email, otp) {
@@ -250,20 +267,30 @@ class AuthService {
   }
 
   /**
-   * Forgot password — generates a 4-digit OTP stored on the user row.
+   * Forgot password — generates a cryptographically secure 6-digit OTP.
+   * Rolls back OTP if email delivery fails to prevent undelivered OTPs in DB.
    */
   async forgotPassword(email) {
+    const GENERIC_MESSAGE = 'If that email is registered, an OTP has been sent.';
+
+    // Rate limit: max 3 OTP requests per email per hour
+    if (!checkOtpRateLimit(email.toLowerCase())) {
+      const err = new Error('Too many OTP requests. Please wait before trying again.');
+      err.statusCode = 429;
+      throw err;
+    }
+
     const result = await pool.query(
-      'SELECT id, email, name FROM users WHERE email = $1',
-      [email.toLowerCase()]
+      'SELECT id, email, name FROM users WHERE email = $1 AND status = $2',
+      [email.toLowerCase(), 'active']
     );
     const user = result.rows[0];
 
-    // Always return same message (security: don't reveal if email exists)
-    const response = { message: 'If an account exists, an OTP has been sent to your email', email };
-    if (!user) return response;
+    // Don't reveal whether the email is registered
+    if (!user) return { message: GENERIC_MESSAGE };
 
-    const otp = String(Math.floor(1000 + Math.random() * 9000));
+    // Cryptographically secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     await pool.query(
@@ -271,14 +298,26 @@ class AuthService {
       [otp, otpExpires, user.id]
     );
 
-    await emailService.sendPasswordResetEmail(user.email, user.name, otp);
+    try {
+      await emailService.sendPasswordResetEmail(user.email, user.name, otp);
+    } catch (err) {
+      // Roll back OTP — don't leave an undelivered OTP in DB (brute-force risk)
+      await pool.query(
+        'UPDATE users SET email_otp = NULL, email_otp_expires = NULL WHERE id = $1',
+        [user.id]
+      );
+      logger.error('OTP email delivery failed', { error: err.message, userId: user.id });
+      const error = new Error('Could not send OTP email. Please try again in a moment.');
+      error.statusCode = 503;
+      throw error;
+    }
 
     logger.info('Password reset OTP sent', { userId: user.id });
-    return response;
+    return { message: GENERIC_MESSAGE, email: user.email };
   }
 
   /**
-   * Reset password using the secure token from verifyResetOtp.
+   * Reset password using the secure token from verifyOtp.
    */
   async resetPassword(token, newPassword) {
     const result = await pool.query(
@@ -316,38 +355,6 @@ class AuthService {
 
     logger.info('Password reset completed', { userId: resetRecord.user_id });
     return { message: 'Password reset successfully' };
-  }
-
-  /**
-   * Change password (authenticated user)
-   */
-  async changePassword(userId, currentPassword, newPassword) {
-    const result = await pool.query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [userId]
-    );
-    const user = result.rows[0];
-
-    if (!user) {
-      const error = new Error('User not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!isValidPassword) {
-      const error = new Error('Current password is incorrect');
-      error.statusCode = 401;
-      throw error;
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
-
-    await this.logoutAll(userId);
-
-    logger.info('Password changed', { userId });
-    return { message: 'Password changed successfully' };
   }
 
   /**

@@ -14,8 +14,7 @@ const {
   loginValidation,
   refreshTokenValidation,
   forgotPasswordValidation,
-  resetPasswordValidation,
-  changePasswordValidation
+  resetPasswordValidation
 } = require('../validators/auth.validator');
 
 /**
@@ -38,7 +37,7 @@ router.post('/forgot-password', passwordResetLimiter, forgotPasswordValidation, 
 
 /**
  * POST /api/v1/auth/verify-otp
- * Body: { email, otp } — verifies OTP, returns { reset_token }
+ * Body: { email, otp } — verifies 6-digit OTP, returns { reset_token }
  */
 router.post('/verify-otp', authLimiter, authController.verifyOtp);
 
@@ -64,12 +63,6 @@ router.post('/logout', authenticateToken, authController.logout);
  * POST /api/v1/auth/logout-all
  */
 router.post('/logout-all', authenticateToken, authController.logoutAll);
-
-/**
- * PUT /api/v1/auth/change-password
- * Body: { currentPassword, newPassword }
- */
-router.put('/change-password', authenticateToken, changePasswordValidation, validate, authController.changePassword);
 
 /**
  * GET /api/v1/auth/me

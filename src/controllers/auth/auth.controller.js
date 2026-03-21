@@ -162,26 +162,6 @@ const resetPassword = async (req, res, next) => {
 };
 
 /**
- * PUT /api/v1/auth/change-password
- * Body: { currentPassword, newPassword }
- */
-const changePassword = async (req, res, next) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    const result = await authService.changePassword(
-      req.user.id,
-      currentPassword,
-      newPassword
-    );
-
-    return ApiResponse.success(res, result, 'Password changed successfully');
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * GET /api/v1/auth/me
  */
 const getCurrentUser = async (req, res, next) => {
@@ -205,6 +185,5 @@ module.exports = {
   forgotPassword,
   verifyOtp,
   resetPassword,
-  changePassword,
   getCurrentUser
 };
