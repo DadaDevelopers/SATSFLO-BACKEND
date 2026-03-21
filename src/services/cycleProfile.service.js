@@ -10,18 +10,23 @@ class CycleProfileService {
    */
   static _calculate(profile) {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     const lastPeriod = new Date(profile.last_period_start);
-    lastPeriod.setHours(0, 0, 0, 0);
+    lastPeriod.setUTCHours(0, 0, 0, 0);
 
     const msPerDay = 86_400_000;
-    const daysSince = Math.floor((today - lastPeriod) / msPerDay);
+    const daysSince = Math.max(0, Math.floor((today - lastPeriod) / msPerDay));
 
-    const currentDay = (daysSince % profile.cycle_length) + 1;
-    const daysUntilPeriod = profile.cycle_length - currentDay + 1;
+    const cycleLength = profile.cycle_length;
+    const currentDay = (daysSince % cycleLength) + 1;
+    const daysUntilPeriod = cycleLength - currentDay + 1;
 
-    const ovulationDay = profile.cycle_length - 14;
+    // ovulation is typically cycle_length - 14 days from start
+    const ovulationDay = cycleLength - 14;
+    const daysUntilOvulation = ovulationDay >= currentDay
+      ? ovulationDay - currentDay
+      : cycleLength - currentDay + ovulationDay;
 
     let phase;
     if (currentDay <= profile.period_length) {
@@ -34,7 +39,7 @@ class CycleProfileService {
       phase = 'luteal';
     }
 
-    return { currentDay, daysUntilPeriod, phase };
+    return { currentDay, daysUntilPeriod, daysUntilOvulation, ovulationDay, phase };
   }
 
   /**
@@ -94,12 +99,14 @@ class CycleProfileService {
 
     if (!data) return null;
 
-    const { currentDay, daysUntilPeriod, phase } = CycleProfileService._calculate(data);
+    const { currentDay, daysUntilPeriod, daysUntilOvulation, ovulationDay, phase } = CycleProfileService._calculate(data);
 
     return {
       ...data,
       current_day: currentDay,
       days_until_period: daysUntilPeriod,
+      days_until_ovulation: daysUntilOvulation,
+      ovulation_day: ovulationDay,
       current_phase: phase
     };
   }

@@ -11,6 +11,17 @@ function isValidDate(str) {
   return !isNaN(d.getTime());
 }
 
+// Map DB field names → frontend-expected field names
+function toFrontend(log) {
+  if (!log) return log;
+  return {
+    ...log,
+    flow: log.flow_level ?? log.flow,
+    mood: log.moods ?? log.mood,
+    notes: log.note ?? log.notes,
+  };
+}
+
 const dayLogsController = {
   async getByDate(req, res) {
     try {
@@ -23,7 +34,25 @@ const dayLogsController = {
       }
 
       const log = await dayLogsService.getByDate(req.user.id, date);
-      return ApiResponse.success(res, log, 'Day log retrieved');
+      return ApiResponse.success(res, toFrontend(log), 'Day log retrieved');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
+  // GET /logs/:date — path param variant used by the frontend
+  async getByDateParam(req, res) {
+    try {
+      const { date } = req.params;
+
+      if (!isValidDate(date)) {
+        return ApiResponse.validationError(res, [
+          { field: 'date', message: 'URL param :date must be YYYY-MM-DD' },
+        ]);
+      }
+
+      const log = await dayLogsService.getByDate(req.user.id, date);
+      return ApiResponse.success(res, toFrontend(log), 'Day log retrieved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -39,6 +68,8 @@ const dayLogsController = {
         ]);
       }
 
+      // Accept frontend field names (flow, mood, notes) as aliases
+      const body = req.body;
       const allowed = [
         'period_start', 'period_end', 'flow_level',
         'symptoms', 'moods', 'medicine',
@@ -47,11 +78,15 @@ const dayLogsController = {
 
       const fields = {};
       for (const key of allowed) {
-        if (req.body[key] !== undefined) fields[key] = req.body[key];
+        if (body[key] !== undefined) fields[key] = body[key];
       }
+      // Frontend aliases
+      if (body.flow !== undefined && fields.flow_level === undefined)   fields.flow_level = body.flow;
+      if (body.mood !== undefined && fields.moods === undefined)        fields.moods = body.mood;
+      if (body.notes !== undefined && fields.note === undefined)        fields.note = body.notes;
 
       const log = await dayLogsService.upsert(req.user.id, date, fields);
-      return ApiResponse.success(res, log, 'Day log saved');
+      return ApiResponse.success(res, toFrontend(log), 'Day log saved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

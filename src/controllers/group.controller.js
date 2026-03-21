@@ -8,7 +8,12 @@ const groupController = {
   async getGroups(req, res) {
     try {
       const result = await groupService.getGroups(req.user.id);
-      return ApiResponse.success(res, result);
+      const mapped = result.map(g => ({
+        ...g,
+        members_count: g.member_count ?? 0,
+        last_message: g.last_message ?? null,
+      }));
+      return ApiResponse.success(res, mapped);
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

@@ -31,11 +31,16 @@ function validateLengths(cycle_length, period_length, luteal_phase_length) {
 const cycleProfileController = {
   async create(req, res) {
     try {
-      const { cycle_length, period_length, last_period_start, luteal_phase_length, ignore_irregular_cycle } = req.body;
+      // Accept both snake_case and camelCase from the frontend
+      const cycle_length       = req.body.cycle_length       ?? req.body.cycleLength;
+      const period_length      = req.body.period_length      ?? req.body.periodLength;
+      const last_period_start  = req.body.last_period_start  ?? req.body.lastPeriodStart;
+      const luteal_phase_length = req.body.luteal_phase_length ?? req.body.lutealPhaseLength;
+      const ignore_irregular_cycle = req.body.ignore_irregular_cycle ?? req.body.ignoreIrregularCycle;
 
       if (!last_period_start) {
         return ApiResponse.validationError(res, [
-          { field: 'last_period_start', message: 'last_period_start is required' },
+          { field: 'last_period_start', message: 'last_period_start (or lastPeriodStart) is required' },
         ]);
       }
 
@@ -62,7 +67,12 @@ const cycleProfileController = {
 
   async update(req, res) {
     try {
-      const { cycle_length, period_length, last_period_start, luteal_phase_length, ignore_irregular_cycle } = req.body;
+      // Accept both snake_case and camelCase
+      const cycle_length       = req.body.cycle_length       ?? req.body.cycleLength;
+      const period_length      = req.body.period_length      ?? req.body.periodLength;
+      const last_period_start  = req.body.last_period_start  ?? req.body.lastPeriodStart;
+      const luteal_phase_length = req.body.luteal_phase_length ?? req.body.lutealPhaseLength;
+      const ignore_irregular_cycle = req.body.ignore_irregular_cycle ?? req.body.ignoreIrregularCycle;
 
       const validationError = validateLengths(cycle_length, period_length, luteal_phase_length);
       if (validationError) return ApiResponse.validationError(res, [validationError]);

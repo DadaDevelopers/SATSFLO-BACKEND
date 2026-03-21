@@ -3,6 +3,7 @@
  */
 
 const authService = require('../../services/auth.service');
+const userService = require('../../services/user.service');
 const ApiResponse = require('../../utils/response');
 
 /**
@@ -166,10 +167,15 @@ const resetPassword = async (req, res, next) => {
  */
 const getCurrentUser = async (req, res, next) => {
   try {
+    const profile = await userService.getProfile(req.user.id);
     return ApiResponse.success(res, {
-      id: req.user.id,
-      email: req.user.email,
-      role: req.user.role
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role,
+      avatar: profile.avatar_url,
+      avatar_url: profile.avatar_url,
+      emailVerified: profile.email_verified
     });
   } catch (error) {
     next(error);

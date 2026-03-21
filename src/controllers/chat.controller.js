@@ -8,7 +8,15 @@ const chatController = {
   async getConversations(req, res) {
     try {
       const result = await chatService.getConversations(req.user.id);
-      return ApiResponse.success(res, result);
+      const mapped = result.map(c => ({
+        ...c,
+        id: c.conversation_id,
+        recipient: c.other_user,
+        name: c.other_user?.name ?? null,
+        updated_at: c.last_message_time ?? null,
+        is_online: c.is_typing ?? false,
+      }));
+      return ApiResponse.success(res, mapped);
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -31,11 +39,15 @@ const chatController = {
     try {
       const { conversationId } = req.params;
       const { page, limit } = req.query;
-      const result = await chatService.getMessages(req.user.id, conversationId, {
+      const messages = await chatService.getMessages(req.user.id, conversationId, {
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 50,
       });
-      return ApiResponse.success(res, result);
+      const mapped = messages.map(m => ({
+        ...m,
+        is_sent: m.sender_id === req.user.id,
+      }));
+      return ApiResponse.success(res, { messages: mapped });
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

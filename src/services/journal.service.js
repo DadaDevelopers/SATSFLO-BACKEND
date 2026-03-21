@@ -29,21 +29,28 @@ class JournalService {
   /**
    * Create a new journal entry.
    */
-  async create(userId, { entry_date, content }) {
+  async create(userId, { entry_date, content, title, mood }) {
     const result = await pool.query(
-      `INSERT INTO ${TABLE} (user_id, entry_date, content)
-       VALUES ($1, $2, $3)
+      `INSERT INTO ${TABLE} (user_id, entry_date, content, title, mood)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [userId, entry_date, content]
+      [userId, entry_date, content, title ?? null, mood ?? null]
     );
 
     return result.rows[0];
   }
 
-  async update(userId, entryId, { content }) {
+  async update(userId, entryId, { content, title, mood }) {
+    const setClauses = ['updated_at = NOW()'];
+    const values = [entryId, userId];
+
+    if (content !== undefined) { values.push(content); setClauses.push(`content = $${values.length}`); }
+    if (title !== undefined)   { values.push(title);   setClauses.push(`title = $${values.length}`); }
+    if (mood !== undefined)    { values.push(mood);     setClauses.push(`mood = $${values.length}`); }
+
     const result = await pool.query(
-      `UPDATE ${TABLE} SET content = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
-      [content, entryId, userId]
+      `UPDATE ${TABLE} SET ${setClauses.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`,
+      values
     );
     if (!result.rows[0]) {
       const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;

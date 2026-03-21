@@ -23,7 +23,13 @@ const communityController = {
         limit: Math.min(50, Math.max(1, Number(limit))),
       });
 
-      return ApiResponse.paginated(res, result.threads, {
+      const threads = result.threads.map(t => ({
+        ...t,
+        likes_count: t.like_count ?? 0,
+        comments_count: t.comment_count ?? 0,
+        is_liked: t.is_liked_by_me ?? false,
+      }));
+      return ApiResponse.paginated(res, threads, {
         page: result.page,
         limit: result.limit,
         total: result.total,
@@ -38,7 +44,12 @@ const communityController = {
       const { id } = req.params;
       const userId = req.user?.id ?? null;
       const thread = await communityService.getThread(id, userId);
-      return ApiResponse.success(res, thread, 'Thread retrieved');
+      return ApiResponse.success(res, {
+        ...thread,
+        likes_count: thread.like_count ?? 0,
+        comments_count: thread.comment_count ?? 0,
+        is_liked: thread.is_liked_by_me ?? false,
+      }, 'Thread retrieved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

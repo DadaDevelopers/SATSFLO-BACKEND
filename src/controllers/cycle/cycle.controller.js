@@ -14,7 +14,9 @@ const logger = require('../../utils/logger');
  */
 const startPeriod = async (req, res, next) => {
   try {
-    const { date, flowIntensity, notes } = req.body;
+    // Accept both start_date (frontend) and date (legacy)
+    const date = req.body.start_date ?? req.body.date;
+    const { flowIntensity, notes } = req.body;
 
     const cycle = await cycleService.startPeriod(req.user.id, {
       date,
@@ -34,7 +36,7 @@ const startPeriod = async (req, res, next) => {
  */
 const endPeriod = async (req, res, next) => {
   try {
-    const { date } = req.body;
+    const date = req.body.end_date ?? req.body.date;
 
     const cycle = await cycleService.endPeriod(req.user.id, { date });
 
@@ -70,7 +72,14 @@ const getCurrentCycle = async (req, res, next) => {
       return ApiResponse.success(res, null, 'No active cycle found');
     }
 
-    return ApiResponse.success(res, cycle);
+    // Add snake_case aliases for frontend compatibility
+    return ApiResponse.success(res, {
+      ...cycle,
+      current_day: cycle.dayOfCycle,
+      cycle_length: cycle.cycleLength,
+      period_length: cycle.periodLength,
+      days_until_next_period: cycle.predictions?.daysUntilPeriod ?? null
+    });
   } catch (error) {
     next(error);
   }
