@@ -27,6 +27,20 @@ class JournalService {
   }
 
   /**
+   * Get a single journal entry by ID.
+   */
+  async getById(userId, entryId) {
+    const result = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE id = $1 AND user_id = $2`,
+      [entryId, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;
+    }
+    return result.rows[0];
+  }
+
+  /**
    * Create a new journal entry.
    */
   async create(userId, { entry_date, content, title, mood }) {
@@ -40,13 +54,14 @@ class JournalService {
     return result.rows[0];
   }
 
-  async update(userId, entryId, { content, title, mood }) {
+  async update(userId, entryId, { content, title, mood, entry_date }) {
     const setClauses = ['updated_at = NOW()'];
     const values = [entryId, userId];
 
-    if (content !== undefined) { values.push(content); setClauses.push(`content = $${values.length}`); }
-    if (title !== undefined)   { values.push(title);   setClauses.push(`title = $${values.length}`); }
-    if (mood !== undefined)    { values.push(mood);     setClauses.push(`mood = $${values.length}`); }
+    if (content !== undefined)    { values.push(content);    setClauses.push(`content = $${values.length}`); }
+    if (title !== undefined)      { values.push(title);      setClauses.push(`title = $${values.length}`); }
+    if (mood !== undefined)       { values.push(mood);       setClauses.push(`mood = $${values.length}`); }
+    if (entry_date !== undefined) { values.push(entry_date); setClauses.push(`entry_date = $${values.length}`); }
 
     const result = await pool.query(
       `UPDATE ${TABLE} SET ${setClauses.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`,

@@ -87,6 +87,23 @@ const updatePreferences = async (req, res, next) => {
 };
 
 /**
+ * Upload avatar (base64 or URL)
+ * POST /api/v1/users/avatar
+ */
+const uploadAvatar = async (req, res, next) => {
+  try {
+    const avatar = req.body.avatar ?? req.body.avatar_base64 ?? req.body.avatar_url;
+    if (!avatar || typeof avatar !== 'string' || avatar.trim().length === 0) {
+      return ApiResponse.validationError(res, [{ field: 'avatar', message: 'avatar (base64 string or URL) is required' }]);
+    }
+    const result = await userService.updateAvatar(req.user.id, avatar.trim());
+    return ApiResponse.success(res, result, 'Avatar updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Delete account
  * DELETE /api/v1/users/account
  */
@@ -149,6 +166,7 @@ const searchUsers = async (req, res, next) => {
 module.exports = {
   getProfile,
   updateProfile,
+  uploadAvatar,
   getHealthProfile,
   updateHealthProfile,
   getPreferences,

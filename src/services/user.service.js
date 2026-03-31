@@ -215,18 +215,40 @@ class UserService {
    */
   getDefaultPreferences() {
     return {
+      // Flat reminder toggles used by the frontend reminders screen
+      period_starts: true,
+      period_ends:   true,
+      fertility:     false,
+      ovulation:     false,
+      medicine:      false,
+      // Legacy nested notifications
       notifications: {
-        periodReminder: true,
+        periodReminder:    true,
         ovulationReminder: true,
-        pillReminder: false,
-        dailyLogReminder: false,
-        communityUpdates: true
+        pillReminder:      false,
+        dailyLogReminder:  false,
+        communityUpdates:  true
       },
       reminderTime: '09:00',
       privacy: 'private',
       theme: 'system',
       units: 'metric'
     };
+  }
+
+  /**
+   * Store avatar (base64 data URL or remote URL) in avatar_url column
+   */
+  async updateAvatar(userId, avatarData) {
+    const result = await pool.query(
+      `UPDATE users SET avatar_url = $1, updated_at = NOW()
+       WHERE id = $2 RETURNING id, avatar_url`,
+      [avatarData, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('User not found'); err.statusCode = 404; throw err;
+    }
+    return result.rows[0];
   }
 
   /**

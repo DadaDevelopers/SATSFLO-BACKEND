@@ -17,7 +17,7 @@ const {
   updatePreferencesValidation,
   userIdParamValidation,
   searchUsersValidation,
-  deleteAccountValidation
+  deleteAccountValidation,
 } = require('../validators/user.validator');
 
 // All routes require authentication
@@ -43,6 +43,13 @@ router.put(
   validate,
   userController.updateProfile
 );
+
+/**
+ * @route   POST /api/v1/users/avatar
+ * @desc    Upload avatar (base64 string or URL)
+ * @access  Private
+ */
+router.post('/avatar', userController.uploadAvatar);
 
 // ==================== HEALTH PROFILE ====================
 

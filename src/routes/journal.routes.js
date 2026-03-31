@@ -14,6 +14,9 @@ router.get('/', journalController.getByMonth);
 // POST /api/v1/journal                — create entry
 router.post('/', journalController.create);
 
+// GET  /api/v1/journal/:id            — get single entry
+router.get('/:id', journalController.getById);
+
 // PUT  /api/v1/journal/:id            — update entry
 router.put('/:id', journalController.update);
 

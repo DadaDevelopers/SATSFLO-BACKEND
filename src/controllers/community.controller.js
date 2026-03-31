@@ -184,7 +184,11 @@ const communityController = {
   async getNotifications(req, res) {
     try {
       const notifications = await communityService.getNotifications(req.user.id);
-      return ApiResponse.success(res, notifications, 'Notifications retrieved');
+      const mapped = notifications.map(n => ({
+        ...n,
+        read: n.is_read ?? false,
+      }));
+      return ApiResponse.success(res, mapped, 'Notifications retrieved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

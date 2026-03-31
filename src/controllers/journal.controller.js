@@ -33,6 +33,16 @@ const journalController = {
     }
   },
 
+  async getById(req, res) {
+    try {
+      const { id } = req.params;
+      const entry = await journalService.getById(req.user.id, id);
+      return ApiResponse.success(res, toFrontend(entry), 'Journal entry retrieved');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   async create(req, res) {
     try {
       // Accept both `date` (frontend) and `entry_date` (legacy)
@@ -62,11 +72,13 @@ const journalController = {
     try {
       const { id } = req.params;
       const { content, title, mood } = req.body;
+      const entry_date = req.body.date ?? req.body.entry_date;
 
       const updates = {};
-      if (content !== undefined) updates.content = content;
-      if (title !== undefined)   updates.title = title;
-      if (mood !== undefined)    updates.mood = mood;
+      if (content !== undefined)    updates.content = content;
+      if (title !== undefined)      updates.title = title;
+      if (mood !== undefined)       updates.mood = mood;
+      if (entry_date !== undefined) updates.entry_date = entry_date;
 
       if (Object.keys(updates).length === 0) {
         return ApiResponse.validationError(res, [{ field: 'body', message: 'Provide at least one field to update' }]);
