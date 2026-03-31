@@ -59,6 +59,12 @@ class CycleService {
       [date, userId]
     );
 
+    // Keep cycle_profiles in sync so GET /cycle-profile calculations stay accurate
+    await pool.query(
+      'UPDATE cycle_profiles SET last_period_start = $1, updated_at = NOW() WHERE user_id = $2',
+      [date, userId]
+    );
+
     logger.info('Period started', { userId, cycleId: cycle.id });
     return this.formatCycle(cycle);
   }
@@ -181,25 +187,41 @@ class CycleService {
 
     if (!cycle) return null;
 
+    // UTC date math to avoid timezone drift
     const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
     const startDate = new Date(cycle.start_date);
-    const dayOfCycle = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    startDate.setUTCHours(0, 0, 0, 0);
+    const dayOfCycle = Math.max(1, Math.floor((today - startDate) / 86_400_000) + 1);
 
-    const hpResult = await pool.query(
-      'SELECT average_cycle_length, average_period_length FROM health_profiles WHERE user_id = $1',
-      [userId]
-    );
-    const healthProfile = hpResult.rows[0];
+    // Prefer user-saved cycle_profiles settings over computed health_profiles averages
+    const [cpResult, hpResult] = await Promise.all([
+      pool.query(
+        'SELECT cycle_length, period_length, luteal_phase_length FROM cycle_profiles WHERE user_id = $1',
+        [userId]
+      ),
+      pool.query(
+        'SELECT average_cycle_length, average_period_length FROM health_profiles WHERE user_id = $1',
+        [userId]
+      ),
+    ]);
+    const cp = cpResult.rows[0];
+    const hp = hpResult.rows[0];
 
-    const avgCycleLength = healthProfile?.average_cycle_length || CYCLE_DEFAULTS.AVERAGE_CYCLE_LENGTH;
-    const avgPeriodLength = healthProfile?.average_period_length || CYCLE_DEFAULTS.AVERAGE_PERIOD_LENGTH;
+    const cycleLength    = cp?.cycle_length    || hp?.average_cycle_length    || CYCLE_DEFAULTS.AVERAGE_CYCLE_LENGTH;
+    const periodLength   = cp?.period_length   || hp?.average_period_length   || CYCLE_DEFAULTS.AVERAGE_PERIOD_LENGTH;
+    const lutealLength   = cp?.luteal_phase_length ?? 14;
+    const ovulationDay   = cycleLength - lutealLength;
 
-    const phase = this.calculatePhase(dayOfCycle, avgCycleLength, avgPeriodLength);
-    const predictions = this.calculatePredictions(cycle, avgCycleLength, avgPeriodLength);
+    const phase       = this.calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay);
+    const predictions = this.calculatePredictions(cycle, cycleLength, periodLength);
 
     return {
       ...this.formatCycle(cycle),
       dayOfCycle,
+      cycleLength,
+      periodLength,
+      ovulationDay,
       phase,
       predictions
     };
@@ -406,39 +428,22 @@ class CycleService {
   /**
    * Calculate current cycle phase
    */
-  calculatePhase(dayOfCycle, avgCycleLength, avgPeriodLength) {
-    if (dayOfCycle <= avgPeriodLength) {
-      return {
-        name: CYCLE_PHASES.MENSTRUAL,
-        day: dayOfCycle,
-        description: 'Menstrual phase - Period days'
-      };
+  // ovulationDay = cycle_length - luteal_phase_length (passed in, not re-derived here)
+  calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay) {
+    // Derive ovulationDay from cycleLength if not supplied (fallback for callers that
+    // don't yet pass it — default 14-day luteal phase)
+    const ovDay = ovulationDay ?? (cycleLength - 14);
+
+    if (dayOfCycle <= periodLength) {
+      return { name: CYCLE_PHASES.MENSTRUAL,  day: dayOfCycle, description: 'Menstrual phase - Period days' };
     }
-
-    const ovulationDay = Math.round(avgCycleLength / 2);
-
-    if (dayOfCycle <= ovulationDay - 5) {
-      return {
-        name: CYCLE_PHASES.FOLLICULAR,
-        day: dayOfCycle,
-        description: 'Follicular phase - Building up to ovulation'
-      };
+    if (dayOfCycle <= ovDay - 2) {
+      return { name: CYCLE_PHASES.FOLLICULAR, day: dayOfCycle, description: 'Follicular phase - Building up to ovulation' };
     }
-
-    if (dayOfCycle <= ovulationDay + 1) {
-      return {
-        name: CYCLE_PHASES.OVULATION,
-        day: dayOfCycle,
-        description: 'Ovulation phase - Most fertile window',
-        isFertile: true
-      };
+    if (dayOfCycle <= ovDay + 2) {
+      return { name: CYCLE_PHASES.OVULATION,  day: dayOfCycle, description: 'Ovulation phase - Most fertile window', isFertile: true };
     }
-
-    return {
-      name: CYCLE_PHASES.LUTEAL,
-      day: dayOfCycle,
-      description: 'Luteal phase - Post-ovulation'
-    };
+    return { name: CYCLE_PHASES.LUTEAL, day: dayOfCycle, description: 'Luteal phase - Post-ovulation' };
   }
 
   /**

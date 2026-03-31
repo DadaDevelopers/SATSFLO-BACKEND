@@ -51,7 +51,7 @@ const cycleProfileController = {
       const validationError = validateLengths(cl, pl, ll);
       if (validationError) return ApiResponse.validationError(res, [validationError]);
 
-      const profile = await cycleProfileService.upsert(req.user.id, {
+      await cycleProfileService.upsert(req.user.id, {
         cycle_length: cl,
         period_length: pl,
         last_period_start,
@@ -59,6 +59,8 @@ const cycleProfileController = {
         ignore_irregular_cycle: ignore_irregular_cycle ?? false,
       });
 
+      // Return full calculated response
+      const profile = await cycleProfileService.getWithCalculations(req.user.id);
       return ApiResponse.created(res, profile, 'Cycle profile saved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
@@ -84,11 +86,13 @@ const cycleProfileController = {
       if (luteal_phase_length !== undefined)  updates.luteal_phase_length = Number(luteal_phase_length);
       if (ignore_irregular_cycle !== undefined) updates.ignore_irregular_cycle = ignore_irregular_cycle;
 
-      const profile = await cycleProfileService.patch(req.user.id, updates);
-      if (!profile) {
+      const patched = await cycleProfileService.patch(req.user.id, updates);
+      if (!patched) {
         return ApiResponse.notFound(res, 'No cycle profile found. Use POST to create one first.');
       }
 
+      // Return full calculated response
+      const profile = await cycleProfileService.getWithCalculations(req.user.id);
       return ApiResponse.success(res, profile, 'Cycle profile updated');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);

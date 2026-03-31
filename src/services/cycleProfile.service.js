@@ -19,11 +19,12 @@ class CycleProfileService {
     const daysSince = Math.max(0, Math.floor((today - lastPeriod) / msPerDay));
 
     const cycleLength = profile.cycle_length;
+    const lutealPhaseLength = profile.luteal_phase_length ?? 14;
     const currentDay = (daysSince % cycleLength) + 1;
-    const daysUntilPeriod = cycleLength - currentDay + 1;
+    const daysUntilPeriod = cycleLength - currentDay;   // spec: cycle_length - current_day
 
-    // ovulation is typically cycle_length - 14 days from start
-    const ovulationDay = cycleLength - 14;
+    // ovulation = cycle_length - luteal_phase_length
+    const ovulationDay = cycleLength - lutealPhaseLength;
     const daysUntilOvulation = ovulationDay >= currentDay
       ? ovulationDay - currentDay
       : cycleLength - currentDay + ovulationDay;
@@ -31,9 +32,9 @@ class CycleProfileService {
     let phase;
     if (currentDay <= profile.period_length) {
       phase = 'menstrual';
-    } else if (currentDay < ovulationDay - 1) {
+    } else if (currentDay <= ovulationDay - 2) {
       phase = 'follicular';
-    } else if (currentDay <= ovulationDay + 1) {
+    } else if (currentDay <= ovulationDay + 2) {
       phase = 'ovulation';
     } else {
       phase = 'luteal';

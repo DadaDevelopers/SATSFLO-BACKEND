@@ -75,10 +75,12 @@ const getCurrentCycle = async (req, res, next) => {
     // Add snake_case aliases for frontend compatibility
     return ApiResponse.success(res, {
       ...cycle,
-      current_day: cycle.dayOfCycle,
-      cycle_length: cycle.cycleLength,
-      period_length: cycle.periodLength,
-      days_until_next_period: cycle.predictions?.daysUntilPeriod ?? null
+      current_day:            cycle.dayOfCycle,
+      cycle_length:           cycle.cycleLength,
+      period_length:          cycle.periodLength,
+      ovulation_day:          cycle.ovulationDay,
+      current_phase:          cycle.phase?.name ?? null,
+      days_until_next_period: cycle.predictions?.nextPeriod?.daysUntil ?? null,
     });
   } catch (error) {
     next(error);
