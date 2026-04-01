@@ -81,6 +81,11 @@ const getCurrentCycle = async (req, res, next) => {
       ovulation_day:          cycle.ovulationDay,
       current_phase:          cycle.phase?.name ?? null,
       days_until_next_period: cycle.predictions?.nextPeriod?.daysUntil ?? null,
+      last_period_start:      cycle.startDate ?? null,
+      period_dates:           cycle.period_dates ?? [],
+      fertility_window:       cycle.fertility_window ?? [],
+      ovulation_date:         cycle.ovulation_date ?? null,
+      pregnancy_chance:       cycle.pregnancy_chance ?? null,
     });
   } catch (error) {
     next(error);

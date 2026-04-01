@@ -6,6 +6,55 @@ const TABLE = 'journal_entries';
 
 class JournalService {
   /**
+   * Fetch cycle_profiles + day_logs symptoms for a date range, return helpers.
+   */
+  async _cycleContext(userId, startDate, endDate) {
+    const [cpResult, logsResult] = await Promise.all([
+      pool.query(
+        'SELECT last_period_start, cycle_length FROM cycle_profiles WHERE user_id = $1',
+        [userId]
+      ),
+      pool.query(
+        'SELECT date, symptoms FROM day_logs WHERE user_id = $1 AND date >= $2 AND date <= $3',
+        [userId, startDate, endDate]
+      ),
+    ]);
+
+    const cp = cpResult.rows[0];
+    const cycleLength = cp?.cycle_length || 28;
+    const lastPeriodStart = cp?.last_period_start ?? null;
+
+    const symptomsMap = {};
+    for (const row of logsResult.rows) {
+      const key = row.date instanceof Date
+        ? row.date.toISOString().split('T')[0]
+        : String(row.date);
+      symptomsMap[key] = Array.isArray(row.symptoms) ? row.symptoms : (row.symptoms ? [row.symptoms] : []);
+    }
+
+    const toCycleDay = (entryDate) => {
+      if (!lastPeriodStart) return null;
+      const ed = new Date(entryDate); ed.setUTCHours(0, 0, 0, 0);
+      const ps = new Date(lastPeriodStart); ps.setUTCHours(0, 0, 0, 0);
+      const diff = Math.floor((ed - ps) / 86_400_000);
+      return diff >= 0 ? (diff % cycleLength) + 1 : null;
+    };
+
+    return { symptomsMap, toCycleDay };
+  }
+
+  _annotate(entry, symptomsMap, toCycleDay) {
+    const key = entry.entry_date instanceof Date
+      ? entry.entry_date.toISOString().split('T')[0]
+      : String(entry.entry_date);
+    return {
+      ...entry,
+      cycle_day: toCycleDay(entry.entry_date),
+      symptoms:  symptomsMap[key] ?? [],
+    };
+  }
+
+  /**
    * Return all journal entries for a given month (YYYY-MM).
    */
   async getByMonth(userId, month) {
@@ -15,15 +64,22 @@ class JournalService {
       mon === 12
         ? `${year + 1}-01-01`
         : `${year}-${String(mon + 1).padStart(2, '0')}-01`;
+    // end date for day_logs query (last day of month)
+    const endDate = new Date(nextMonth);
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const endStr = endDate.toISOString().split('T')[0];
 
-    const result = await pool.query(
-      `SELECT * FROM ${TABLE}
-       WHERE user_id = $1 AND entry_date >= $2 AND entry_date < $3
-       ORDER BY entry_date DESC`,
-      [userId, start, nextMonth]
-    );
+    const [entriesResult, { symptomsMap, toCycleDay }] = await Promise.all([
+      pool.query(
+        `SELECT * FROM ${TABLE}
+         WHERE user_id = $1 AND entry_date >= $2 AND entry_date < $3
+         ORDER BY entry_date DESC`,
+        [userId, start, nextMonth]
+      ),
+      this._cycleContext(userId, start, endStr),
+    ]);
 
-    return result.rows;
+    return entriesResult.rows.map(e => this._annotate(e, symptomsMap, toCycleDay));
   }
 
   /**
@@ -37,7 +93,12 @@ class JournalService {
     if (!result.rows[0]) {
       const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;
     }
-    return result.rows[0];
+    const entry = result.rows[0];
+    const dateStr = entry.entry_date instanceof Date
+      ? entry.entry_date.toISOString().split('T')[0]
+      : String(entry.entry_date);
+    const { symptomsMap, toCycleDay } = await this._cycleContext(userId, dateStr, dateStr);
+    return this._annotate(entry, symptomsMap, toCycleDay);
   }
 
   /**

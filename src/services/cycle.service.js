@@ -216,6 +216,37 @@ class CycleService {
     const phase       = this.calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay);
     const predictions = this.calculatePredictions(cycle, cycleLength, periodLength);
 
+    // Absolute-date calendar arrays (all UTC)
+    const startDateObj = new Date(cycle.start_date);
+    startDateObj.setUTCHours(0, 0, 0, 0);
+
+    const addDays = (base, n) => {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().split('T')[0];
+    };
+
+    // period_dates: start_date through start_date + periodLength - 1
+    const period_dates = Array.from({ length: periodLength }, (_, i) => addDays(startDateObj, i));
+
+    // ovulation_date: cycle day ovulationDay → startDate + (ovulationDay - 1) days
+    const ovulation_date = addDays(startDateObj, ovulationDay - 1);
+
+    // fertility_window: 5 days before ovulation day up to (but not including) ovulation day
+    const fertility_window = Array.from({ length: 5 }, (_, i) =>
+      addDays(startDateObj, ovulationDay - 6 + i)
+    );
+
+    // pregnancy_chance based on where today falls in the cycle
+    let pregnancy_chance;
+    if (dayOfCycle >= ovulationDay - 5 && dayOfCycle <= ovulationDay + 1) {
+      pregnancy_chance = 'High';
+    } else if (dayOfCycle >= ovulationDay - 7 && dayOfCycle <= ovulationDay + 3) {
+      pregnancy_chance = 'Medium';
+    } else {
+      pregnancy_chance = 'Low';
+    }
+
     return {
       ...this.formatCycle(cycle),
       dayOfCycle,
@@ -223,7 +254,11 @@ class CycleService {
       periodLength,
       ovulationDay,
       phase,
-      predictions
+      predictions,
+      period_dates,
+      fertility_window,
+      ovulation_date,
+      pregnancy_chance,
     };
   }
 
