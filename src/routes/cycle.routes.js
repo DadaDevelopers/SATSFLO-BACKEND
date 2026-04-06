@@ -20,6 +20,7 @@ const {
   cycleIdParamValidation,
   dateParamValidation
 } = require('../validators/cycle.validator');
+const { updatePeriodStart, updatePeriodEnd } = cycleController;
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -50,6 +51,20 @@ router.post(
   validate,
   cycleController.endPeriod
 );
+
+/**
+ * @route   PUT /api/v1/cycles/start
+ * @desc    Correct/update the start date of the current active period
+ * @access  Private
+ */
+router.put('/start', startPeriodValidation, validate, updatePeriodStart);
+
+/**
+ * @route   PUT /api/v1/cycles/end
+ * @desc    Correct/update the end date of the current active period
+ * @access  Private
+ */
+router.put('/end', endPeriodValidation, validate, updatePeriodEnd);
 
 /**
  * @route   POST /api/v1/cycles/log

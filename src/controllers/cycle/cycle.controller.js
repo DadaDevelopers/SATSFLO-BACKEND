@@ -47,6 +47,34 @@ const endPeriod = async (req, res, next) => {
 };
 
 /**
+ * Update period start date on current active cycle
+ * PUT /api/v1/cycles/start
+ */
+const updatePeriodStart = async (req, res, next) => {
+  try {
+    const date = req.body.start_date ?? req.body.date;
+    const cycle = await cycleService.updatePeriodStart(req.user.id, { date });
+    return ApiResponse.success(res, cycle, 'Period start date updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update period end date on current active cycle
+ * PUT /api/v1/cycles/end
+ */
+const updatePeriodEnd = async (req, res, next) => {
+  try {
+    const date = req.body.end_date ?? req.body.date;
+    const cycle = await cycleService.updatePeriodEnd(req.user.id, { date });
+    return ApiResponse.success(res, cycle, 'Period end date updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Log daily entry
  * POST /api/v1/cycles/log
  */
@@ -238,6 +266,8 @@ const addCycleLog = async (req, res, next) => {
 module.exports = {
   startPeriod,
   endPeriod,
+  updatePeriodStart,
+  updatePeriodEnd,
   logDailyEntry,
   addCycleLog,
   getCurrentCycle,

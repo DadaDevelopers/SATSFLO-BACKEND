@@ -26,18 +26,27 @@ module.exports = {
     SPOTTING: 'spotting',
     LIGHT: 'light',
     MEDIUM: 'medium',
-    HEAVY: 'heavy'
+    HEAVY: 'heavy',
+    VERY_HEAVY: 'very_heavy'
   },
 
   // Mood types for tracking
   MOOD_TYPES: {
+    NORMAL: 'normal',
     HAPPY: 'happy',
     SAD: 'sad',
+    CALM: 'calm',
+    HYPED: 'hyped',
+    IN_LOVE: 'in_love',
+    PEACEFUL: 'peaceful',
+    ANGRY: 'angry',
+    LONELY: 'lonely',
+    SILLY: 'silly',
+    RELAXED: 'relaxed',
     IRRITABLE: 'irritable',
     ANXIOUS: 'anxious',
     ENERGETIC: 'energetic',
     TIRED: 'tired',
-    CALM: 'calm',
     STRESSED: 'stressed',
     EMOTIONAL: 'emotional',
     CONFIDENT: 'confident'
@@ -86,7 +95,23 @@ module.exports = {
 
     // Other
     WATER_RETENTION: 'water_retention',
-    WEIGHT_FLUCTUATION: 'weight_fluctuation'
+    WEIGHT_FLUCTUATION: 'weight_fluctuation',
+
+    // Log-screen symptom aliases
+    BELLY_ACHE: 'belly_ache',
+    SORE_BREASTS: 'sore_breasts'
+  },
+
+  // Medicine / contraception options
+  MEDICINE_TYPES: {
+    CONDOM: 'condom',
+    PATCH: 'patch',
+    INJECTION: 'injection',
+    SPERMICIDE: 'spermicide',
+    IUD: 'iud',
+    PILL: 'pill',
+    IMPLANT: 'implant',
+    VAGINAL_RING: 'vaginal_ring'
   },
 
   // Symptom severity levels

@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const logger = require('../utils/logger');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -208,6 +209,7 @@ class PartnerService {
       await pool.query(`UPDATE partner_invites SET status = 'expired' WHERE id = $1`, [invite.id]);
       throw err('This invite code has expired', 410);
     }
+    logger.debug('acceptInvite comparison', { inviterId: invite.sender_id, acceptorId: receiverId });
     if (invite.sender_id === receiverId) throw err('You cannot accept your own invite', 400);
 
     // Sender must not already have a partner (race condition guard)

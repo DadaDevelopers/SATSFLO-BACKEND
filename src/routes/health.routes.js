@@ -22,6 +22,13 @@ const {
   updateMoodValidation,
   dateRangeValidation
 } = require('../validators/health.validator');
+const {
+  logFlow,
+  logMedicine,
+  logNote,
+  logWeight, getWeightHistory,
+  logTemperature, getTemperatureHistory,
+} = healthController;
 const { dateParamValidation } = require('../validators/cycle.validator');
 
 // All routes require authentication
@@ -175,6 +182,47 @@ router.delete(
   validate,
   healthController.deleteMood
 );
+
+// ==================== FLOW ====================
+
+// POST /api/v1/health/flow  — log flow level (spotting/light/medium/heavy/very_heavy)
+// PUT  /api/v1/health/flow  — update flow level for a date
+router.post('/flow', logFlow);
+router.put('/flow', logFlow);
+
+// ==================== MEDICINE ====================
+
+// POST /api/v1/health/medicine  — log contraception used
+// PUT  /api/v1/health/medicine  — update contraception for a date
+router.post('/medicine', logMedicine);
+router.put('/medicine', logMedicine);
+
+// ==================== NOTES ====================
+
+// POST /api/v1/health/notes  — add a daily note
+// PUT  /api/v1/health/notes  — update a daily note
+router.post('/notes', logNote);
+router.put('/notes', logNote);
+
+// ==================== WEIGHT ====================
+
+// POST /api/v1/health/weight  — log weight for today (or provided date)
+// PUT  /api/v1/health/weight  — update weight (same upsert behaviour)
+router.post('/weight', logWeight);
+router.put('/weight', logWeight);
+
+// GET /api/v1/health/weight?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/weight', getWeightHistory);
+
+// ==================== TEMPERATURE ====================
+
+// POST /api/v1/health/temperature  — log BBT for today (or provided date)
+// PUT  /api/v1/health/temperature  — update temperature (same upsert behaviour)
+router.post('/temperature', logTemperature);
+router.put('/temperature', logTemperature);
+
+// GET /api/v1/health/temperature?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/temperature', getTemperatureHistory);
 
 // ==================== ANALYTICS ====================
 

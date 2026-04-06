@@ -112,6 +112,66 @@ class CycleService {
   }
 
   /**
+   * Update start date of current active cycle
+   */
+  async updatePeriodStart(userId, { date }) {
+    const result = await pool.query(
+      `UPDATE cycles SET start_date = $1, updated_at = NOW()
+       WHERE user_id = $2 AND end_date IS NULL
+       RETURNING *`,
+      [date, userId]
+    );
+    if (!result.rows[0]) {
+      const error = new Error('No active period found');
+      error.statusCode = 404;
+      throw error;
+    }
+    // Keep cycle_profiles in sync
+    await pool.query(
+      'UPDATE cycle_profiles SET last_period_start = $1, updated_at = NOW() WHERE user_id = $2',
+      [date, userId]
+    );
+    await pool.query(
+      'UPDATE health_profiles SET last_period_date = $1 WHERE user_id = $2',
+      [date, userId]
+    );
+    logger.info('Period start date updated', { userId, date });
+    return this.formatCycle(result.rows[0]);
+  }
+
+  /**
+   * Update end date of current active cycle's period
+   */
+  async updatePeriodEnd(userId, { date }) {
+    const cycleResult = await pool.query(
+      `SELECT * FROM cycles WHERE user_id = $1 AND end_date IS NULL ORDER BY start_date DESC LIMIT 1`,
+      [userId]
+    );
+    const cycle = cycleResult.rows[0];
+    if (!cycle) {
+      const error = new Error('No active period found');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (new Date(date) < new Date(cycle.start_date)) {
+      const error = new Error('End date cannot be before start date');
+      error.statusCode = 400;
+      throw error;
+    }
+    const periodLength = Math.ceil(
+      (new Date(date) - new Date(cycle.start_date)) / (1000 * 60 * 60 * 24)
+    ) + 1;
+    const updated = await pool.query(
+      `UPDATE cycles SET period_end_date = $1, period_length = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [date, periodLength, cycle.id]
+    );
+    await this.updateAverages(userId);
+    logger.info('Period end date updated', { userId, date });
+    return this.formatCycle(updated.rows[0]);
+  }
+
+  /**
    * Log daily entry for cycle
    */
   async logDailyEntry(userId, data) {
