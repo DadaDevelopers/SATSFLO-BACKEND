@@ -329,32 +329,6 @@ const logMedicine = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ==================== NOTES ====================
-
-/**
- * POST /api/v1/health/notes  — add a daily note
- * PUT  /api/v1/health/notes  — update a daily note
- * Body: { note: string, date?: 'YYYY-MM-DD' }
- */
-const logNote = async (req, res, next) => {
-  try {
-    const { note, notes, date } = req.body;
-    const text = note ?? notes;
-    if (text === undefined || text === null) {
-      return ApiResponse.validationError(res, [{ field: 'note', message: 'note is required' }]);
-    }
-    if (typeof text !== 'string' || text.length > 1000) {
-      return ApiResponse.validationError(res, [{ field: 'note', message: 'note must be a string, max 1000 characters' }]);
-    }
-    const logDate = date || today();
-    if (!isValidDate(logDate)) {
-      return ApiResponse.validationError(res, [{ field: 'date', message: 'date must be YYYY-MM-DD' }]);
-    }
-    const log = await dayLogsService.upsert(req.user.id, logDate, { note: text });
-    return ApiResponse.success(res, { date: log.log_date, note: log.note }, 'Note saved');
-  } catch (error) { next(error); }
-};
-
 // ==================== WEIGHT ====================
 
 /**
@@ -460,10 +434,9 @@ module.exports = {
   getDailySummary,
   getHealthTrends,
 
-  // Flow, Medicine, Notes
+  // Flow & Medicine
   logFlow,
   logMedicine,
-  logNote,
 
   // Weight & Temperature
   logWeight,

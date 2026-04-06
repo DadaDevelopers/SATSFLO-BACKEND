@@ -87,17 +87,32 @@ const updatePreferences = async (req, res, next) => {
 };
 
 /**
- * Upload avatar (base64 or URL)
- * POST /api/v1/users/avatar
+ * Upload avatar
+ * POST /api/v1/users/avatar          — JSON body { avatar: base64string|url }
+ * POST /api/v1/users/profile/avatar  — multipart/form-data { file } OR JSON { avatar }
  */
 const uploadAvatar = async (req, res, next) => {
   try {
-    const avatar = req.body.avatar ?? req.body.avatar_base64 ?? req.body.avatar_url;
-    if (!avatar || typeof avatar !== 'string' || avatar.trim().length === 0) {
-      return ApiResponse.validationError(res, [{ field: 'avatar', message: 'avatar (base64 string or URL) is required' }]);
+    let avatarData;
+
+    if (req.file) {
+      // multipart upload — convert buffer to base64 data URL
+      const mime = req.file.mimetype;
+      const b64  = req.file.buffer.toString('base64');
+      avatarData = `data:${mime};base64,${b64}`;
+    } else {
+      avatarData = req.body.avatar ?? req.body.avatar_base64 ?? req.body.avatar_url;
     }
-    const result = await userService.updateAvatar(req.user.id, avatar.trim());
-    return ApiResponse.success(res, result, 'Avatar updated');
+
+    if (!avatarData || typeof avatarData !== 'string' || avatarData.trim().length === 0) {
+      return ApiResponse.validationError(res, [{
+        field: 'file',
+        message: 'Provide a file (multipart) or avatar (base64/URL) in the request body',
+      }]);
+    }
+
+    const result = await userService.updateAvatar(req.user.id, avatarData.trim());
+    return ApiResponse.success(res, { avatar_url: result.avatar_url }, 'Avatar updated');
   } catch (error) {
     next(error);
   }

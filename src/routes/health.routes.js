@@ -25,7 +25,6 @@ const {
 const {
   logFlow,
   logMedicine,
-  logNote,
   logWeight, getWeightHistory,
   logTemperature, getTemperatureHistory,
 } = healthController;
@@ -196,13 +195,6 @@ router.put('/flow', logFlow);
 // PUT  /api/v1/health/medicine  — update contraception for a date
 router.post('/medicine', logMedicine);
 router.put('/medicine', logMedicine);
-
-// ==================== NOTES ====================
-
-// POST /api/v1/health/notes  — add a daily note
-// PUT  /api/v1/health/notes  — update a daily note
-router.post('/notes', logNote);
-router.put('/notes', logNote);
 
 // ==================== WEIGHT ====================
 

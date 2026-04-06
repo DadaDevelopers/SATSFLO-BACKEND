@@ -32,7 +32,13 @@ const updateProfileValidation = [
 
   body('language')
     .optional()
-    .isIn(['en', 'sw', 'fr', 'es', 'pt'])
+    .isIn([
+      'English', 'Spanish', 'Swahili', 'Arabic', 'Hindi',
+      'French', 'German', 'Russian', 'Mandarin', 'Portuguese',
+      'Indonesia', 'Urdu',
+      // legacy ISO codes
+      'en', 'sw', 'fr', 'es', 'pt',
+    ])
     .withMessage('Unsupported language'),
 
   body('avatarUrl')
@@ -115,55 +121,35 @@ const updateHealthProfileValidation = [
  * Update preferences validation
  */
 const updatePreferencesValidation = [
-  body('notifications')
+  body('reminders')
     .optional()
     .isObject()
-    .withMessage('Notifications must be an object'),
+    .withMessage('reminders must be an object'),
 
-  body('notifications.periodReminder')
+  body('reminders.periodStarts')
     .optional()
     .isBoolean()
-    .withMessage('Period reminder must be a boolean'),
+    .withMessage('periodStarts must be a boolean'),
 
-  body('notifications.ovulationReminder')
+  body('reminders.periodEnds')
     .optional()
     .isBoolean()
-    .withMessage('Ovulation reminder must be a boolean'),
+    .withMessage('periodEnds must be a boolean'),
 
-  body('notifications.pillReminder')
+  body('reminders.fertility')
     .optional()
     .isBoolean()
-    .withMessage('Pill reminder must be a boolean'),
+    .withMessage('fertility must be a boolean'),
 
-  body('notifications.dailyLogReminder')
+  body('reminders.ovulation')
     .optional()
     .isBoolean()
-    .withMessage('Daily log reminder must be a boolean'),
+    .withMessage('ovulation must be a boolean'),
 
-  body('notifications.communityUpdates')
+  body('reminders.medicine')
     .optional()
     .isBoolean()
-    .withMessage('Community updates must be a boolean'),
-
-  body('reminderTime')
-    .optional()
-    .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-    .withMessage('Reminder time must be in HH:MM format'),
-
-  body('privacy')
-    .optional()
-    .isIn(Object.values(PRIVACY_LEVELS))
-    .withMessage('Invalid privacy level'),
-
-  body('theme')
-    .optional()
-    .isIn(['light', 'dark', 'system'])
-    .withMessage('Theme must be light, dark, or system'),
-
-  body('units')
-    .optional()
-    .isIn(['metric', 'imperial'])
-    .withMessage('Units must be metric or imperial')
+    .withMessage('medicine must be a boolean'),
 ];
 
 /**

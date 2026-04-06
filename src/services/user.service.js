@@ -168,6 +168,7 @@ class UserService {
 
   /**
    * Get user preferences
+   * Returns the reminders sub-object in the exact shape the frontend expects.
    */
   async getPreferences(userId) {
     const result = await pool.query(
@@ -182,57 +183,69 @@ class UserService {
       throw err;
     }
 
-    return user.preferences || this.getDefaultPreferences();
+    const prefs = user.preferences || {};
+    return this.formatPreferences(prefs);
   }
 
   /**
-   * Update user preferences
+   * Update user preferences.
+   * Accepts { reminders: { periodStarts, periodEnds, fertility, ovulation, medicine } }
+   * and deep-merges into the stored JSONB.
    */
-  async updatePreferences(userId, preferences) {
-    const currentPrefs = await this.getPreferences(userId);
+  async updatePreferences(userId, incoming) {
+    const currentPrefs = await pool.query(
+      'SELECT preferences FROM users WHERE id = $1',
+      [userId]
+    );
+    const stored = currentPrefs.rows[0]?.preferences || {};
 
-    const mergedPreferences = {
-      ...currentPrefs,
-      ...preferences,
-      notifications: {
-        ...currentPrefs.notifications,
-        ...(preferences.notifications || {})
-      }
+    // Merge reminders key
+    const merged = {
+      ...stored,
     };
+    if (incoming.reminders) {
+      merged.reminders = {
+        ...(stored.reminders || this.defaultReminders()),
+        ...incoming.reminders,
+      };
+    }
+    // Allow other top-level keys to pass through (theme, units, etc.)
+    for (const key of Object.keys(incoming)) {
+      if (key !== 'reminders') merged[key] = incoming[key];
+    }
 
     const result = await pool.query(
       `UPDATE users SET preferences = $1, updated_at = NOW() WHERE id = $2
        RETURNING preferences`,
-      [mergedPreferences, userId]
+      [merged, userId]
     );
 
     logger.info('Preferences updated', { userId });
-    return result.rows[0].preferences;
+    return this.formatPreferences(result.rows[0].preferences);
   }
 
   /**
-   * Get default preferences
+   * Default reminder toggles
    */
-  getDefaultPreferences() {
+  defaultReminders() {
     return {
-      // Flat reminder toggles used by the frontend reminders screen
-      period_starts: true,
-      period_ends:   true,
-      fertility:     false,
-      ovulation:     false,
-      medicine:      false,
-      // Legacy nested notifications
-      notifications: {
-        periodReminder:    true,
-        ovulationReminder: true,
-        pillReminder:      false,
-        dailyLogReminder:  false,
-        communityUpdates:  true
+      periodStarts: true,
+      periodEnds:   true,
+      fertility:    false,
+      ovulation:    false,
+      medicine:     false,
+    };
+  }
+
+  /**
+   * Format raw JSONB preferences into the shape the frontend expects
+   */
+  formatPreferences(prefs) {
+    return {
+      reminders: {
+        ...this.defaultReminders(),
+        ...(prefs.reminders || {}),
       },
-      reminderTime: '09:00',
-      privacy: 'private',
-      theme: 'system',
-      units: 'metric'
     };
   }
 

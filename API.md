@@ -38,10 +38,11 @@ Frontend reads `response.data.data.<field>` (axios wraps response in `.data`; en
 15. [Health — Symptoms](#15-health--symptoms)
 16. [Health — Moods](#16-health--moods)
 17. [Health — Analytics](#17-health--analytics)
-18. [Lightning](#18-lightning)
-19. [Enums & Constants](#19-enums--constants)
-20. [Error Codes](#20-error-codes)
-21. [Rate Limits](#21-rate-limits)
+18. [Health — Vitals (Add Log)](#18-health--vitals-add-log)
+19. [Lightning](#19-lightning)
+20. [Enums & Constants](#20-enums--constants)
+21. [Error Codes](#21-error-codes)
+22. [Rate Limits](#22-rate-limits)
 
 ---
 
@@ -98,7 +99,8 @@ All require `Authorization: Bearer <token>`.
 |--------|----------|-------------|
 | `GET`  | `/users/profile` | Profile: `id, email, name, phone, avatar_url, date_of_birth, timezone, language, role` |
 | `PUT`  | `/users/profile` | Update profile. Fields: `name, phone, date_of_birth, timezone, language` |
-| `POST` | `/users/avatar` | Upload avatar. Body: `{ "avatar": "<base64 or URL>" }` → updates `avatar_url` |
+| `POST` | `/users/avatar` | Upload avatar (JSON). Body: `{ "avatar": "<base64 or data URL>" }` → updates `avatar_url` |
+| `POST` | `/users/profile/avatar` | Upload avatar (multipart). Field: `file` (image, max 5 MB) → updates `avatar_url` |
 | `GET`  | `/users/preferences` | Get reminder toggles + UI preferences |
 | `PUT`  | `/users/preferences` | Update preferences (partial merge, no reset) |
 | `GET`  | `/users/health-profile` | Health profile (decrypted) |
@@ -109,26 +111,37 @@ All require `Authorization: Bearer <token>`.
 **`GET /users/preferences` response:**
 ```json
 {
-  "period_starts": true,
-  "period_ends":   true,
-  "fertility":     false,
-  "ovulation":     false,
-  "medicine":      false,
-  "reminderTime":  "09:00",
-  "theme":         "system",
-  "units":         "metric"
+  "reminders": {
+    "periodStarts": true,
+    "periodEnds":   true,
+    "fertility":    false,
+    "ovulation":    false,
+    "medicine":     false
+  }
 }
 ```
 
-**`PUT /users/preferences` body** (all optional, merged):
+**`PUT /users/preferences` body** (all optional, deep-merged into `reminders`):
 ```json
 {
-  "period_starts": true,
-  "period_ends":   true,
-  "fertility":     false,
-  "ovulation":     false,
-  "medicine":      false
+  "reminders": {
+    "periodStarts": true,
+    "periodEnds":   true,
+    "fertility":    false,
+    "ovulation":    false,
+    "medicine":     false
+  }
 }
+```
+
+**`POST /users/profile/avatar` request:**
+```
+Content-Type: multipart/form-data
+Field: file  (image/*, max 5 MB)
+```
+**Response:**
+```json
+{ "avatar_url": "data:image/jpeg;base64,..." }
 ```
 
 > `health_conditions`, `medications`, `notes` (health profile) are AES-256-GCM encrypted at rest. Returned decrypted.
@@ -197,8 +210,10 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/cycles/start` | Start a period. Body: `{ "start_date": "YYYY-MM-DD" }`. Also syncs `last_period_start` in cycle profile. |
+| `POST` | `/cycles/start` | Start a new period. Body: `{ "start_date": "YYYY-MM-DD" }`. Syncs `last_period_start` in cycle profile. |
+| `PUT`  | `/cycles/start` | Update start date of current period. Body: `{ "date": "YYYY-MM-DD" }` |
 | `POST` | `/cycles/end` | End current period. Body: `{ "end_date": "YYYY-MM-DD" }` |
+| `PUT`  | `/cycles/end` | Update end date of current period. Body: `{ "date": "YYYY-MM-DD" }` |
 | `GET`  | `/cycles/current` | Current cycle status with phase + predictions |
 | `GET`  | `/cycles/predictions` | Predictions only (next period, ovulation, fertile window) |
 | `GET`  | `/cycles/analytics` | Analytics. Query: `startDate?, endDate?` |
@@ -214,13 +229,18 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 ```json
 {
   "id": "uuid",
-  "startDate": "2026-03-10",
+  "startDate":               "2026-03-10",
+  "last_period_start":       "2026-03-10",
   "current_day":             21,
   "cycle_length":            28,
   "period_length":           5,
   "ovulation_day":           14,
   "current_phase":           "luteal",
   "days_until_next_period":  7,
+  "period_dates":            ["2026-03-10", "2026-03-11", "2026-03-12", "2026-03-13", "2026-03-14"],
+  "fertility_window":        ["2026-03-18", "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22"],
+  "ovulation_date":          "2026-03-23",
+  "pregnancy_chance":        "Low",
   "phase": { "name": "luteal", "day": 21, "description": "..." },
   "predictions": {
     "nextPeriod":    { "date": "YYYY-MM-DD", "daysUntil": 7 },
@@ -230,38 +250,65 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 }
 ```
 
+> `last_period_start` is an alias for `startDate`.
+> `period_dates` — array of YYYY-MM-DD strings for each day of the period (length = `period_length`).
+> `fertility_window` — 5 dates from `ovulation_day - 5` to `ovulation_day - 1` as absolute dates.
+> `ovulation_date` — absolute date string for the ovulation day.
+> `pregnancy_chance` — `"High"` (within fertile window ±1 day), `"Medium"` (2 days outside), `"Low"` (otherwise).
 > The home screen uses `days_until_next_period` (with `next_`).
 > The cycle-profile fallback uses `days_until_period` (without `next_`).
 
-**Flow intensity:** `spotting` · `light` · `medium` · `heavy`
+**Flow intensity:** `spotting` · `light` · `medium` · `heavy` · `very_heavy`
 
 ---
 
 ## 5. Day Logs
 
-One log per calendar date. All require `Authorization: Bearer <token>`.
+One log per calendar date. All fields are optional; only fields present in the PUT body are updated. All require `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET`  | `/logs/:date` | Get log for a date (path param). Returns `null` data if none exists. |
+| `GET`  | `/logs/:date` | Get log for a date (path param). Always returns a full object (never null). |
 | `GET`  | `/logs?date=YYYY-MM-DD` | Same as above (query param variant). |
 | `GET`  | `/logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD` | All logs in date range. |
-| `PUT`  | `/logs/:date` | Upsert log for `:date`. Safe to call multiple times. |
+| `PUT`  | `/logs/:date` | Upsert log for `:date`. Safe to call multiple times (partial update). |
 
-**PUT body** — all fields optional, accepts both frontend and DB field names:
+**`PUT /logs/:date` body** — all fields optional, both frontend and DB names accepted:
 
-| Frontend name | DB name | Type |
-|---------------|---------|------|
-| `flow` | `flow_level` | string |
-| `mood` | `moods` | string or array |
-| `notes` | `note` | string |
-| `symptoms` | `symptoms` | array |
-| `weight` | `weight` | number |
-| `temperature` | `temperature` | number |
-| `water_intake` | `water_intake` | number (ml) |
-| `medicine` | `medicine` | array |
+| Accepted name | Also accepts | Type | Notes |
+|--------------|--------------|------|-------|
+| `flow_level` | `flow` | string | See flow enum below |
+| `mood` | `moods` | string \| string[] | Stored as array |
+| `notes` | `note` | string | |
+| `symptoms` | — | string[] | |
+| `medicine` | — | string[] | See medicine enum |
+| `weight` | — | number \| string | Parsed to numeric |
+| `weight_unit` | — | string | `"kg"` or `"lb"` |
+| `temperature` | — | number \| string | Parsed to numeric |
+| `temperature_unit` | — | string | `"C"` or `"F"` |
+| `water_intake_ml` | `water_intake` | number | Millilitres |
+| `period_start` | — | boolean | |
+| `period_end` | — | boolean | |
 
-**GET response** includes both names — `flow`, `mood`, `notes` (frontend aliases) plus originals.
+**`GET /logs/:date` response** (always a full object, defaults shown when no log exists):
+```json
+{
+  "flow_level":       "veryHeavy",
+  "symptoms":         ["cramps", "headache"],
+  "mood":             ["happy"],
+  "notes":            "Feeling okay",
+  "medicine":         ["pill"],
+  "weight":           65.5,
+  "weight_unit":      "kg",
+  "temperature":      36.6,
+  "temperature_unit": "C",
+  "water_intake_ml":  1500,
+  "period_start":     false,
+  "period_end":       false
+}
+```
+
+> `flow_level` is returned in camelCase (`veryHeavy`) to match frontend expectations. Input accepts both `veryHeavy` and `very_heavy`.
 
 ---
 
@@ -302,46 +349,69 @@ Private diary. All require `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET`  | `/journal?month=YYYY-MM` | All entries for a calendar month. |
+| `GET`  | `/journal?month=YYYY-MM` | All entries for a calendar month, ordered newest first. |
+| `GET`  | `/journal/search?q=text&month=YYYY-MM` | Full-text search in title + content. `month` is optional. Max 50 results. |
+| `POST` | `/journal/media` | Upload images/videos. Returns base64 data URLs to embed in `images[]`. |
 | `POST` | `/journal` | Create entry. |
 | `GET`  | `/journal/:id` | Get single entry by ID. |
-| `PUT`  | `/journal/:id` | Update entry. |
+| `PUT`  | `/journal/:id` | Update entry (partial — only sent fields are changed). |
 | `DELETE` | `/journal/:id` | Delete entry. |
 
-**POST body:**
+**`POST /journal/media` request:**
+```
+Content-Type: multipart/form-data
+Field: files  (up to 5 files, images or video, max 10 MB each)
+```
+**Response:**
+```json
+{ "urls": ["data:image/jpeg;base64,...", "data:video/mp4;base64,..."] }
+```
+Use the returned `urls` in the `images[]` array when creating or updating an entry.
+
+**`POST /journal` body:**
 ```json
 {
-  "date":    "2026-03-31",
-  "content": "Feeling good today",
-  "title":   "Day 21",
-  "mood":    "happy"
+  "date":     "2026-03-31",
+  "title":    "Day 21",
+  "content":  "Feeling good today",
+  "mood":     "happy",
+  "symptoms": ["Clear skin", "High energy"],
+  "images":   ["data:image/jpeg;base64,..."]
 }
 ```
-> `title` and `mood` are optional. `content` may be empty string. `date` and `entry_date` are both accepted.
+> `title`, `mood`, `symptoms`, `images` are optional. `content` may be empty string.
+> `date` and `entry_date` are both accepted.
 
-**GET list item / GET by ID / POST / PUT response:**
+**`GET /journal` list item / `GET /journal/:id` / `POST` / `PUT` response:**
 ```json
 {
   "id":         "uuid",
   "date":       "2026-03-31",
-  "entry_date": "2026-03-31",
   "title":      "Day 21",
   "content":    "Feeling good today",
   "mood":       "happy",
-  "created_at": "...",
-  "updated_at": "..."
+  "symptoms":   ["Clear skin", "High energy"],
+  "images":     ["data:image/jpeg;base64,..."],
+  "cycle_day":  21,
+  "created_at": "ISO timestamp",
+  "updated_at": "ISO timestamp"
+}
+```
+> `cycle_day` is computed from `cycle_profiles.last_period_start`. Returns `null` if no cycle profile exists.
+
+**`PUT /journal/:id` body** (all optional):
+```json
+{
+  "title":    "Updated title",
+  "content":  "Updated content",
+  "mood":     "calm",
+  "symptoms": ["Bloating"],
+  "images":   [],
+  "date":     "2026-03-31"
 }
 ```
 
-**PUT body** (all optional):
-```json
-{
-  "title":   "Updated title",
-  "content": "Updated content",
-  "mood":    "calm",
-  "date":    "2026-03-31"
-}
-```
+**Valid mood values:** `normal` · `happy` · `sad` · `calm` · `hyped` · `inlove` · `peaceful` · `angry` · `lonely` · `silly` · `relaxed`
 
 ---
 
@@ -590,7 +660,53 @@ All require `Authorization: Bearer <token>`.
 
 ---
 
-## 18. Lightning
+## 18. Health — Vitals (Add Log)
+
+Shortcut endpoints for the Add Log screen. Each call upserts the corresponding field in `day_logs` for today (or a specified date). All require `Authorization: Bearer <token>`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/health/flow` | Log flow level for today. Body: `{ "date": "YYYY-MM-DD", "flow": "heavy" }` |
+| `PUT`  | `/health/flow` | Same as POST (idempotent alias). |
+| `POST` | `/health/medicine` | Log medicine taken. Body: `{ "date": "YYYY-MM-DD", "medicine": ["pill"] }` |
+| `PUT`  | `/health/medicine` | Same as POST (idempotent alias). |
+| `POST` | `/health/weight` | Log weight. Body: `{ "date": "YYYY-MM-DD", "weight": 65.5, "weight_unit": "kg" }` |
+| `PUT`  | `/health/weight` | Same as POST (idempotent alias). |
+| `GET`  | `/health/weight` | Last 30 days of weight entries. Query: none. |
+| `POST` | `/health/temperature` | Log basal body temperature. Body: `{ "date": "YYYY-MM-DD", "temperature": 36.6, "temperature_unit": "C" }` |
+| `PUT`  | `/health/temperature` | Same as POST (idempotent alias). |
+| `GET`  | `/health/temperature` | Last 30 days of temperature entries. Query: none. |
+
+**Flow body:**
+```json
+{ "date": "2026-04-07", "flow": "heavy" }
+```
+> `flow` and `flow_level` both accepted. Values: `spotting` · `light` · `medium` · `heavy` · `very_heavy` (also accepts camelCase `veryHeavy`).
+
+**Medicine body:**
+```json
+{ "date": "2026-04-07", "medicine": ["pill", "ibuprofen"] }
+```
+> Standard values: `condom` · `patch` · `injection` · `spermicide` · `iud` · `pill` · `implant` · `vaginal_ring`. Free-form strings also accepted.
+
+**Weight / Temperature body:**
+```json
+{ "date": "2026-04-07", "weight": 65.5, "weight_unit": "kg" }
+{ "date": "2026-04-07", "temperature": 36.6, "temperature_unit": "C" }
+```
+> `weight` and `temperature` accept numeric strings (e.g. `"65.5"`).
+
+**`GET /health/weight` and `GET /health/temperature` response:**
+```json
+[
+  { "date": "2026-04-07", "weight": 65.5, "weight_unit": "kg" },
+  { "date": "2026-04-06", "weight": 65.2, "weight_unit": "kg" }
+]
+```
+
+---
+
+## 19. Lightning
 
 Direct Lightning wallet integration. All require `Authorization: Bearer <token>`.
 
@@ -609,7 +725,7 @@ Direct Lightning wallet integration. All require `Authorization: Bearer <token>`
 
 ---
 
-## 19. Enums & Constants
+## 20. Enums & Constants
 
 | Group | Values |
 |-------|--------|
@@ -626,7 +742,7 @@ Direct Lightning wallet integration. All require `Authorization: Bearer <token>`
 
 ---
 
-## 20. Error Codes
+## 21. Error Codes
 
 | Status | Meaning |
 |--------|---------|
