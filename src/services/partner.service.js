@@ -65,6 +65,13 @@ function partnerShareSettings(partnership, myRole) {
 
 // ── Phase calculation (mirrors cycleProfile.service) ─────────────────────────
 
+const PHASE_DESCRIPTIONS = {
+  menstrual:  'Your partner is in their period. They may need some extra care right now.',
+  follicular: 'Your partner is in the follicular phase. Energy levels are rising.',
+  ovulation:  'Your partner is in the ovulation period. Keep in touch and stay connected.',
+  luteal:     'Your partner is in the luteal phase. They may experience mood changes.',
+};
+
 function calculatePhase(profile) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -380,6 +387,17 @@ class PartnerService {
     const pId = partnerId(partnership, role);
     const perms = partnerShareSettings(partnership, role);
 
+    // Partner user info (for nickname header)
+    const partnerUserResult = await pool.query(
+      `SELECT id, name, avatar_url FROM users WHERE id = $1`,
+      [pId]
+    );
+    const partnerUser = partnerUserResult.rows[0];
+
+    // My nickname for the partner (what I call them — used as the cycle header)
+    const myRole = role;
+    const partnerNickname = partnership[`${myRole}_partner_nickname`] || partnerUser?.name;
+
     // Partner's cycle profile
     const profileResult = await pool.query(
       `SELECT * FROM cycle_profiles WHERE user_id = $1`,
@@ -391,39 +409,35 @@ class PartnerService {
     const { currentDay, daysUntilPeriod, daysUntilOvulation, phase, pregnancyChance } = calculatePhase(profile);
 
     const response = {
-      cycle_day: currentDay,
-      cycle_phase: phase,
-      next_period_days: daysUntilPeriod,
+      partner_name:       partnerUser?.name,
+      partner_nickname:   partnerNickname,
+      partner_avatar_url: partnerUser?.avatar_url,
+      cycle_day:          currentDay,
+      cycle_phase:        phase,
+      phase_description:  PHASE_DESCRIPTIONS[phase] ?? '',
+      next_period_days:   daysUntilPeriod,
       next_ovulation_days: daysUntilOvulation,
-      pregnancy_chance: pregnancyChance,
-      todays_symptoms: null,
-      moods: null,
-      sex_drive: null,
+      pregnancy_chance:   pregnancyChance,
+      todays_symptoms:    null,
+      moods:              null,
+      sex_drive:          null,
     };
 
     if (perms.share_symptoms_moods) {
       const today = new Date().toISOString().slice(0, 10);
 
-      const [symptomsResult, moodsResult] = await Promise.all([
-        pool.query(
-          `SELECT symptom, category, severity, time_of_day FROM symptoms
-           WHERE user_id = $1 AND date = $2 ORDER BY created_at`,
-          [pId, today]
-        ),
-        pool.query(
-          `SELECT mood, intensity FROM moods
-           WHERE user_id = $1 AND date = $2 ORDER BY created_at`,
-          [pId, today]
-        ),
-      ]);
-
-      response.todays_symptoms = symptomsResult.rows;
-      response.moods = moodsResult.rows;
+      // Read from day_logs (unified daily log)
+      const logResult = await pool.query(
+        `SELECT symptoms, moods FROM day_logs WHERE user_id = $1 AND log_date = $2`,
+        [pId, today]
+      );
+      const log = logResult.rows[0];
+      response.todays_symptoms = log?.symptoms ?? [];
+      response.moods           = log?.moods    ?? [];
     }
 
-    // sex_drive: not yet a tracked field — return null unless schema is extended
     if (!perms.share_sex_drive) {
-      response.sex_drive = undefined;
+      delete response.sex_drive;
     }
 
     return response;

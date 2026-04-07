@@ -421,26 +421,181 @@ Use the returned `urls` in the `images[]` array when creating or updating an ent
 
 All require `Authorization: Bearer <token>`.
 
-**Invite flow:**
+### Sender flow
+
+| Step | Method | Endpoint | Description |
+|------|--------|----------|-------------|
+| 1 | `POST` | `/partner/invite` | Set sharing options + generate 6-char code. Expires 24 h. |
+| 2 | `GET`  | `/partner/invite/status` | Poll until `status = "accepted"` (receiver has connected). |
+| 3 | `PUT`  | `/partner/nickname` | Save nicknames after pairing is confirmed. |
+
+**`POST /partner/invite` body** (sharing options selected on the Sharing Options screen):
+```json
+{
+  "share_period_dates":   true,
+  "share_fertile_window": true,
+  "share_symptoms_moods": false,
+  "share_cycle_insights": false,
+  "share_sex_drive":      false
+}
+```
+All sharing fields are optional — defaults: `period_dates=true`, `fertile_window=true`, rest `false`.
+
+**`POST /partner/invite` response:**
+```json
+{
+  "invite_code":          "X9L4Q8",
+  "expires_at":           "2026-04-08T14:30:00Z",
+  "share_period_dates":   true,
+  "share_fertile_window": true,
+  "share_symptoms_moods": false,
+  "share_cycle_insights": false,
+  "share_sex_drive":      false
+}
+```
+
+**`GET /partner/invite/status` response:**
+```json
+{
+  "invite_code": "X9L4Q8",
+  "status":      "accepted",
+  "expires_at":  "2026-04-08T14:30:00Z",
+  "partner":     { "id": "uuid", "name": "Sarah", "avatar_url": "..." }
+}
+```
+`status` values: `none` · `pending` · `accepted` · `expired`
+
+---
+
+### Receiver flow
+
+| Step | Method | Endpoint | Description |
+|------|--------|----------|-------------|
+| 1 | `POST` | `/partner/accept` | Enter the 6-char code to pair. |
+| 2 | `PUT`  | `/partner/nickname` | Save nicknames after success screen. |
+
+**`POST /partner/accept` body:**
+```json
+{ "invite_code": "X9L4Q8" }
+```
+**Response:**
+```json
+{
+  "partnership_id": "uuid",
+  "partner": { "id": "uuid", "name": "Sarah", "avatar_url": "..." }
+}
+```
+
+---
+
+### Nicknames (both sender and receiver — runs after pairing)
+
+**`PUT /partner/nickname` body:**
+```json
+{
+  "my_nickname":      "My Love",
+  "partner_nickname": "Babe"
+}
+```
+Both fields are optional — send one or both. The two Figma screens ("What name does your partner call you?" and "Any nickname you have for your partner?") can each call this endpoint individually or be combined into one call on Done.
+
+**Response:**
+```json
+{ "my_nickname": "My Love", "partner_nickname": "Babe" }
+```
+
+---
+
+### After pairing — management
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/partner/invite` | Generate 6-char invite code. Returns `{ invite_code, expires_at }`. Expires 24h. |
-| `GET`  | `/partner/invite/status` | Check status: `{ invite_code, status: pending\|accepted\|expired, partner? }` |
-| `POST` | `/partner/accept` | Accept invite. Body: `{ "invite_code": "ABCD12" }` |
+| `GET`    | `/partner` | My Partner screen data |
+| `DELETE` | `/partner` | Unpair (Unpair with Partner dialog → Yes, Unpair) |
+| `GET`    | `/partner/settings` | My current sharing permissions |
+| `PUT`    | `/partner/settings` | Update what I share with my partner |
+| `PUT`    | `/partner/mode` | Toggle partner mode (Switch to my partner's cycle) |
+| `GET`    | `/partner/cycle` | View partner's cycle data |
+| `GET`    | `/partner/calendar` | View partner's calendar |
 
-**After pairing:**
+**`GET /partner` response** (My Partner screen):
+```json
+{
+  "partnership_id":      "uuid",
+  "partner":             { "id": "uuid", "name": "Sarah", "avatar_url": "..." },
+  "my_nickname":         "My Love",
+  "partner_nickname":    "Babe",
+  "partner_mode_enabled": false,
+  "connected_since":     "2026-04-06T10:00:00Z",
+  "my_sharing": {
+    "share_period_dates":   true,
+    "share_fertile_window": true,
+    "share_symptoms_moods": false,
+    "share_cycle_insights": false,
+    "share_sex_drive":      false
+  }
+}
+```
+> "Paired for X day(s)" — calculate on frontend: `Math.floor((Date.now() - new Date(connected_since)) / 86400000)`.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET`    | `/partner` | Partner info: `{ partner, my_nickname, partner_nickname, partner_mode_enabled, connected_since }` |
-| `DELETE` | `/partner` | Unpair |
-| `PUT`    | `/partner/nickname` | Body: `{ "my_nickname": "...", "partner_nickname": "..." }` |
-| `GET`    | `/partner/settings` | Your sharing permissions |
-| `PUT`    | `/partner/settings` | Update sharing. Fields: `share_period_dates, share_fertile_window, share_symptoms_moods, share_cycle_insights, share_sex_drive` |
-| `PUT`    | `/partner/mode` | Body: `{ "partner_mode_enabled": true }` |
-| `GET`    | `/partner/cycle` | Partner's cycle (filtered by their sharing settings) |
-| `GET`    | `/partner/calendar` | Partner's calendar dates |
+**`PUT /partner/settings` body** (all optional, partial update):
+```json
+{
+  "share_period_dates":   true,
+  "share_fertile_window": true,
+  "share_symptoms_moods": true,
+  "share_cycle_insights": false,
+  "share_sex_drive":      false
+}
+```
+
+**`PUT /partner/mode` body:**
+```json
+{ "partner_mode_enabled": true }
+```
+
+---
+
+### Partner cycle view ("Babe's Cycle")
+
+**`GET /partner/cycle` response** (filtered by partner's sharing settings):
+```json
+{
+  "partner_name":        "Sarah",
+  "partner_nickname":    "Babe",
+  "partner_avatar_url":  "...",
+  "cycle_day":           12,
+  "cycle_phase":         "ovulation",
+  "phase_description":   "Your partner is in the ovulation period. Keep in touch and stay connected.",
+  "next_period_days":    15,
+  "next_ovulation_days": 7,
+  "pregnancy_chance":    "Low",
+  "todays_symptoms":     ["cramps", "headache"],
+  "moods":               ["happy", "calm"],
+  "sex_drive":           null
+}
+```
+> `partner_nickname` is used as the screen heading — e.g. "Babe's Cycle".
+> `todays_symptoms` and `moods` are read from the partner's `day_logs` for today. Both are `null` if `share_symptoms_moods = false`.
+> `sex_drive` is always `null` — not yet a tracked field. Field is omitted from response if `share_sex_drive = false`.
+> `phase_description` values by phase:
+> - `menstrual` → "Your partner is in their period. They may need some extra care right now."
+> - `follicular` → "Your partner is in the follicular phase. Energy levels are rising."
+> - `ovulation`  → "Your partner is in the ovulation period. Keep in touch and stay connected."
+> - `luteal`     → "Your partner is in the luteal phase. They may experience mood changes."
+
+**`GET /partner/calendar` response** (filtered by sharing settings):
+```json
+{
+  "period_days":     ["2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-25"],
+  "fertility_window": ["2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16"],
+  "ovulation_day":   "2026-04-16",
+  "cycle_count":     4
+}
+```
+> `period_days` is `null` if `share_period_dates = false`.
+> `fertility_window` and `ovulation_day` are `null` if `share_fertile_window = false`.
+> Returns 403 if partner has disabled both `share_period_dates` and `share_fertile_window`.
 
 ---
 
