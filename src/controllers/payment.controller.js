@@ -86,6 +86,15 @@ const paymentController = {
     }
   },
 
+  async getBtcPrice(req, res) {
+    try {
+      const price = await paymentService.getBtcPrice();
+      return ApiResponse.success(res, price, 'BTC price retrieved');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   async webhook(req, res) {
     try {
       // Simple webhook: body contains { payment_hash }

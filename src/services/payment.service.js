@@ -5,6 +5,31 @@ const { bech32 } = require('bech32');
 const bolt11Decoder = require('bolt11');
 const { pool } = require('../config/database');
 
+// ─── BTC price cache ─────────────────────────────────────────────────────────
+
+let _btcPriceCache = null; // { usd, updated_at }
+
+async function fetchBtcPrice() {
+  // Refresh at most once per 2 minutes
+  if (_btcPriceCache && Date.now() - _btcPriceCache.updated_at < 120_000) {
+    return _btcPriceCache;
+  }
+  try {
+    const res = await axios.get(
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+      { timeout: 8000 }
+    );
+    const usd = res.data?.bitcoin?.usd;
+    if (!usd) throw new Error('Unexpected price response');
+    _btcPriceCache = { usd, updated_at: Date.now() };
+    return _btcPriceCache;
+  } catch (e) {
+    // Return stale cache if available, otherwise re-throw
+    if (_btcPriceCache) return _btcPriceCache;
+    throw err(`Could not fetch BTC price: ${e.message}`, 502);
+  }
+}
+
 // ─── Format validators ───────────────────────────────────────────────────────
 
 const LN_ADDRESS_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/;
@@ -269,21 +294,22 @@ class PaymentService {
 
   /**
    * Get payment history for a user.
+   * Uses LEFT JOIN so external-address tips (receiver_id = NULL) still appear.
    */
   async getHistory(userId, type = 'sent') {
-    const field = type === 'received' ? 'receiver_id' : 'sender_id';
-    const joinField = type === 'received' ? 'sender_id' : 'receiver_id';
-    const joinAlias = type === 'received' ? 'sender' : 'recipient';
+    const field     = type === 'received' ? 'receiver_id' : 'sender_id';
+    const joinField = type === 'received' ? 'sender_id'   : 'receiver_id';
+    const joinAlias = type === 'received' ? 'sender'      : 'recipient';
 
     const result = await pool.query(
       `SELECT
          gt.id, gt.amount_sats, gt.status, gt.note, gt.created_at,
-         gt.thread_id, gt.payment_hash,
-         u.id   AS other_user_id,
-         u.name AS other_user_name,
+         gt.thread_id, gt.payment_hash, gt.lightning_address,
+         u.id         AS other_user_id,
+         u.name       AS other_user_name,
          u.avatar_url AS other_user_avatar
        FROM gift_transactions gt
-       JOIN users u ON gt.${joinField} = u.id
+       LEFT JOIN users u ON gt.${joinField} = u.id
        WHERE gt.${field} = $1
        ORDER BY gt.created_at DESC
        LIMIT 50`,
@@ -291,15 +317,31 @@ class PaymentService {
     );
 
     return result.rows.map(r => ({
-      id: r.id,
-      amount_sats: r.amount_sats,
-      status: r.status,
-      note: r.note,
-      created_at: r.created_at,
-      thread_id: r.thread_id,
-      payment_hash: r.payment_hash,
-      [joinAlias]: { id: r.other_user_id, name: r.other_user_name, avatar_url: r.other_user_avatar }
+      id:               r.id,
+      amount_sats:      r.amount_sats,
+      status:           r.status,
+      note:             r.note,
+      created_at:       r.created_at,
+      thread_id:        r.thread_id,
+      payment_hash:     r.payment_hash,
+      lightning_address: r.lightning_address,
+      [joinAlias]: r.other_user_id
+        ? { id: r.other_user_id, name: r.other_user_name, avatar_url: r.other_user_avatar }
+        : null,
     }));
+  }
+
+  /**
+   * Get current BTC/USD price (cached 2 min).
+   * Used by the frontend for USD ↔ SATS conversion on the amount input.
+   */
+  async getBtcPrice() {
+    const { usd, updated_at } = await fetchBtcPrice();
+    return {
+      btc_usd:         usd,
+      sats_per_usd:    Math.round(100_000_000 / usd),
+      updated_at:      new Date(updated_at).toISOString(),
+    };
   }
 }
 

@@ -621,20 +621,100 @@ All require `Authorization: Bearer <token>` except `/webhook`.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/payments/validate` | ✓ | Validate LN address before paying. Body: `{ lightning_address }` |
-| `POST` | `/payments/tip` | ✓ | Create tip. Body: `recipient_id` or `lightning_address`, plus `amount_sats, thread_id?, note?` |
-| `POST` | `/payments/confirm` | ✓ | Mark payment complete. Body: `{ payment_hash }` |
+| `GET`  | `/payments/btc-price` | ✓ | Current BTC/USD price for USD ↔ SATS conversion. Cached 2 min. |
+| `POST` | `/payments/validate` | ✓ | Validate LN address before amount entry. Body: `{ lightning_address }` |
+| `POST` | `/payments/tip` | ✓ | Create tip + fetch invoice. Returns bolt11 + payment_hash. |
+| `POST` | `/payments/confirm` | ✓ | Mark payment sent. Body: `{ payment_hash }` |
 | `GET`  | `/payments/status/:paymentHash` | ✓ | Poll status: `pending\|completed\|failed` |
-| `GET`  | `/payments/history` | ✓ | Tx history. Query: `type=sent\|received` |
+| `GET`  | `/payments/history?type=sent` | ✓ | Tx history. Query: `type=sent\|received` |
 | `POST` | `/payments/webhook` | — | Provider webhook. Header: `x-webhook-secret` |
 
-**Flow:**
+### Gift Token flow (Figma screens)
+
 ```
-POST /payments/validate     → check address reachable
-POST /payments/tip          → get invoice
-open lightning:<invoice>    → user pays in wallet
-POST /payments/confirm      → mark completed
+Screen 1: Intro          → no API call
+Screen 2: Choose action  → no API call
+
+Screen 3: Send Gift Token (destination + amount + note)
+  1. GET  /payments/btc-price     → sats_per_usd for the USD↔SATS amount toggle
+  2. POST /payments/validate      → confirm address reachable, get min/max sats
+  3. POST /payments/tip           → on "Create Invoice" tap
+
+Screen 4: Create Invoice (QR code + countdown)
+  → render bolt11_invoice as QR code
+  → countdown timer from expires_at (10 min window)
+  → "I have sent the tip" → POST /payments/confirm
+
+Screen 5: Success "Your SATS was sent successfully!!"
 ```
+
+### `GET /payments/btc-price` response:
+```json
+{
+  "btc_usd":      94250.00,
+  "sats_per_usd": 1060,
+  "updated_at":   "2026-04-07T14:30:00Z"
+}
+```
+> `amount_sats = Math.round(usd_amount * sats_per_usd)`.
+> Fetched from CoinGecko, cached 2 min. Returns stale cache if CoinGecko is unreachable (502 if no cache).
+
+### `POST /payments/validate` body:
+```json
+{ "lightning_address": "Sarahabraham@blink.sv" }
+```
+**Response:** `{ "valid": true, "min_sats": 1, "max_sats": 1000000, "comment_allowed": 140 }`
+> Call when the user finishes entering the destination. Use `min_sats`/`max_sats` to clamp the amount input.
+
+### `POST /payments/tip` body:
+```json
+{
+  "lightning_address": "Sarahabraham@blink.sv",
+  "amount_sats":       106700,
+  "note":              "For flowers"
+}
+```
+Or tip a SatsFlo user by ID (looks up their saved lightning address):
+```json
+{ "recipient_id": "uuid", "amount_sats": 106700, "note": "Great post!", "thread_id": "uuid" }
+```
+**Response:**
+```json
+{
+  "transaction_id":    "uuid",
+  "bolt11_invoice":    "lnbc10760nx...",
+  "payment_hash":      "abc123...",
+  "amount_sats":       106700,
+  "expires_at":        "2026-04-07T14:40:00Z",
+  "lightning_address": "Sarahabraham@blink.sv"
+}
+```
+> `bolt11_invoice` → render as QR code. Also display truncated as wallet address text.
+> `expires_at` → drive the countdown timer. Invoice window is 10 min.
+> BTC display: `amount_sats / 100_000_000`.
+
+### `POST /payments/confirm` body:
+```json
+{ "payment_hash": "abc123..." }
+```
+> Returns 409 if already confirmed, 410 if invoice expired.
+
+### `GET /payments/history` response:
+```json
+[
+  {
+    "id":                "uuid",
+    "amount_sats":       106700,
+    "status":            "completed",
+    "note":              "For flowers",
+    "created_at":        "ISO timestamp",
+    "payment_hash":      "abc123...",
+    "lightning_address": "Sarahabraham@blink.sv",
+    "recipient":         null
+  }
+]
+```
+> `recipient` / `sender` is `null` when the counterparty is an external Lightning address (not a SatsFlo user).
 
 ---
 
