@@ -446,6 +446,7 @@ All sharing fields are optional — defaults: `period_dates=true`, `fertile_wind
 {
   "invite_code":          "X9L4Q8",
   "expires_at":           "2026-04-08T14:30:00Z",
+  "share_url":            "https://satsflo.app/invite?code=X9L4Q8",
   "share_period_dates":   true,
   "share_fertile_window": true,
   "share_symptoms_moods": false,
@@ -453,6 +454,10 @@ All sharing fields are optional — defaults: `period_dates=true`, `fertile_wind
   "share_sex_drive":      false
 }
 ```
+> `share_url` is the link to use with the native share sheet when the user taps "Share my code".
+> Opening `share_url` on a device with the app installed deep-links to the "Enter Code to Connect" screen with the code pre-filled.
+> Opening it without the app shows a web landing page with the code + App Store / Play Store download links.
+> Configured via `APP_URL` env var (default `https://satsflo.app`).
 
 **`GET /partner/invite/status` response:**
 ```json

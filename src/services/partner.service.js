@@ -156,7 +156,12 @@ class PartnerService {
       ]
     );
 
-    return result.rows[0];
+    const row = result.rows[0];
+    const appUrl = process.env.APP_URL || 'https://satsflo.app';
+    return {
+      ...row,
+      share_url: `${appUrl}/invite?code=${row.invite_code}`,
+    };
   }
 
   // ── Invite status ───────────────────────────────────────────────────────────

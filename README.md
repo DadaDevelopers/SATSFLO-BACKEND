@@ -153,6 +153,7 @@ RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
 # From: SatsFlo <info@satsflo.app>
 
 # ── App links ─────────────────────────────────────────────────
+APP_URL=https://satsflo.app        # base URL for partner invite share links (invite?code=XXXXXX)
 DEEP_LINK_URL=satsflo://           # mobile deep link prefix
 FRONTEND_URL=https://satsflo.app   # fallback for email links
 
