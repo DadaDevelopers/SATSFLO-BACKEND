@@ -80,15 +80,24 @@ const cycleProfileController = {
       if (validationError) return ApiResponse.validationError(res, [validationError]);
 
       const updates = {};
-      if (cycle_length !== undefined)         updates.cycle_length = Number(cycle_length);
-      if (period_length !== undefined)        updates.period_length = Number(period_length);
-      if (last_period_start !== undefined)    updates.last_period_start = last_period_start;
-      if (luteal_phase_length !== undefined)  updates.luteal_phase_length = Number(luteal_phase_length);
+      if (cycle_length !== undefined)          updates.cycle_length = Number(cycle_length);
+      if (period_length !== undefined)         updates.period_length = Number(period_length);
+      if (last_period_start !== undefined)     updates.last_period_start = last_period_start;
+      if (luteal_phase_length !== undefined)   updates.luteal_phase_length = Number(luteal_phase_length);
       if (ignore_irregular_cycle !== undefined) updates.ignore_irregular_cycle = ignore_irregular_cycle;
 
-      const patched = await cycleProfileService.patch(req.user.id, updates);
+      let patched = await cycleProfileService.patch(req.user.id, updates);
+
+      // No profile row yet — upsert with provided values + safe defaults
       if (!patched) {
-        return ApiResponse.notFound(res, 'No cycle profile found. Use POST to create one first.');
+        const today = new Date().toISOString().slice(0, 10);
+        await cycleProfileService.upsert(req.user.id, {
+          cycle_length:           updates.cycle_length           ?? 28,
+          period_length:          updates.period_length          ?? 5,
+          last_period_start:      updates.last_period_start      ?? today,
+          luteal_phase_length:    updates.luteal_phase_length    ?? 14,
+          ignore_irregular_cycle: updates.ignore_irregular_cycle ?? false,
+        });
       }
 
       // Return full calculated response
@@ -104,7 +113,20 @@ const cycleProfileController = {
       const profile = await cycleProfileService.getWithCalculations(req.user.id);
 
       if (!profile) {
-        return ApiResponse.notFound(res, 'No cycle profile found. Please create one first.');
+        // Return defaults so the Settings screen can display sensible values
+        // before the user has ever saved a cycle profile.
+        return ApiResponse.success(res, {
+          cycle_length:           28,
+          period_length:          5,
+          luteal_phase_length:    14,
+          last_period_start:      null,
+          ignore_irregular_cycle: false,
+          current_day:            null,
+          days_until_period:      null,
+          days_until_ovulation:   null,
+          ovulation_day:          14,
+          current_phase:          null,
+        }, 'No cycle profile yet — showing defaults');
       }
 
       return ApiResponse.success(res, profile, 'Cycle profile retrieved');
