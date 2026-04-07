@@ -44,6 +44,8 @@ Frontend reads `response.data.data.<field>` (axios wraps response in `.data`; en
 21. [Error Codes](#21-error-codes)
 22. [Rate Limits](#22-rate-limits)
 
+
+
 ---
 
 ## 1. Authentication
@@ -730,15 +732,21 @@ Direct Lightning wallet integration. All require `Authorization: Bearer <token>`
 | Group | Values |
 |-------|--------|
 | Cycle phases | `menstrual` · `follicular` · `ovulation` · `luteal` |
-| Flow intensity | `spotting` · `light` · `medium` · `heavy` |
+| Flow intensity | `spotting` · `light` · `medium` · `heavy` · `very_heavy` (API input also accepts `veryHeavy`) |
 | Cervical mucus | `dry` · `sticky` · `creamy` · `watery` · `egg_white` |
 | Symptom categories | `physical` · `emotional` · `pain` · `digestive` · `skin` · `sleep` |
-| Mood types | `happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident` |
+| Day-log moods | `happy` · `sad` · `irritable` · `anxious` · `energetic` · `tired` · `calm` · `stressed` · `emotional` · `confident` · `normal` · `hyped` · `in_love` · `peaceful` · `angry` · `lonely` · `silly` · `relaxed` |
+| Journal moods | `normal` · `happy` · `sad` · `calm` · `hyped` · `inlove` · `peaceful` · `angry` · `lonely` · `silly` · `relaxed` |
+| Medicine (standard) | `condom` · `patch` · `injection` · `spermicide` · `iud` · `pill` · `implant` · `vaginal_ring` (free-form strings also accepted) |
+| Weight units | `kg` · `lb` |
+| Temperature units | `C` · `F` |
+| Pregnancy chance | `High` · `Medium` · `Low` |
 | Notification types | `comment` · `like` |
 | Account status | `active` · `inactive` · `suspended` · `deleted` |
 | Payment status | `pending` · `completed` · `failed` |
 | Themes | `light` · `dark` · `system` |
 | Privacy | `private` · `friends` · `public` |
+| Language | `English` · `Spanish` · `Swahili` · `Arabic` · `Hindi` · `French` · `German` · `Russian` · `Mandarin` · `Portuguese` · `Indonesia` · `Urdu` (legacy codes `en` · `sw` · `fr` · `es` · `pt` also accepted) |
 
 ---
 
@@ -760,7 +768,7 @@ Direct Lightning wallet integration. All require `Authorization: Bearer <token>`
 
 ---
 
-## 21. Rate Limits
+## 22. Rate Limits
 
 | Group | Limit |
 |-------|-------|
@@ -777,8 +785,18 @@ Direct Lightning wallet integration. All require `Authorization: Bearer <token>`
 - All dates: `YYYY-MM-DD`. All timestamps: ISO 8601 UTC.
 - Cycle calculations use UTC date math — no timezone offset issues.
 - Upsert endpoints (`PUT /logs/:date`, `PUT /water-settings`, `POST /cycle-profile`) are safe to call multiple times.
-- `PUT /cycle-profile` is a **true partial update** — only sends fields are changed. Other fields are preserved.
-- `POST /cycles/start` automatically updates `cycle_profiles.last_period_start` to keep the wheel in sync.
-- Health fields (`health_conditions`, `medications`, `notes`) are encrypted at rest with AES-256-GCM. Returned decrypted.
+- `PUT /cycle-profile` is a **true partial update** — only the fields you send are changed; others are preserved.
+- `PUT /logs/:date` is also a partial update — only the fields present in the request body are written.
+- `POST /cycles/start` automatically updates `cycle_profiles.last_period_start` to keep the cycle wheel in sync.
+- `PUT /cycles/start` and `PUT /cycles/end` update an existing period's dates without creating a new cycle.
+- `GET /logs/:date` always returns a full object with all fields set to their defaults — never returns `null` or empty body.
+- Avatar upload supports both JSON (`POST /users/avatar`, field `avatar`) and multipart (`POST /users/profile/avatar`, field `file`).
+- Journal `symptoms` are free-form tags stored in `journal_entries` — separate from the structured day-log symptoms in `health_symptoms`.
+- Journal `images` are base64 data URLs. Upload via `POST /journal/media` first, then embed the returned URLs.
+- `cycle_day` in journal entries is computed at read time from `cycle_profiles.last_period_start`; it is `null` if no cycle profile exists.
+- Health fields (`health_conditions`, `medications`, `notes` in health profile) are encrypted at rest with AES-256-GCM. Returned decrypted.
 - OTP codes are 6 digits, cryptographically secure (`crypto.randomInt`), valid 10 min, max 3/hour per email.
 - Lightning invoices expire in 10 min. After expiry `GET /payments/status` returns `status: failed`.
+- Pending migrations to run before next deploy:
+  - `20260322000000_day_logs_units.js` — adds `weight_unit`, `temperature_unit` columns; expands flow CHECK to include `very_heavy`
+  - `20260322000001_journal_symptoms_images.js` — adds `symptoms TEXT[]` and `images TEXT[]` to `journal_entries`

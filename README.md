@@ -40,13 +40,14 @@ SatsFlo is a menstrual health tracking app that rewards users with Bitcoin (sats
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js 20+ |
-| Framework | Express 4 |
-| Database | PostgreSQL 15+ |
+| Runtime | Node.js ≥ 18 |
+| Framework | Express 5 |
+| Database | PostgreSQL 14+ |
 | ORM/Query | `pg` (raw parameterised SQL) |
 | Migrations | `node-pg-migrate` |
 | Auth | `bcrypt` + `jsonwebtoken` (access + refresh tokens) |
-| Email | Nodemailer → Resend SMTP (`smtp.resend.com:465`) |
+| Email | Resend SDK (HTTP — SMTP is blocked on Render) |
+| File uploads | `multer` (memory storage → base64 data URLs) |
 | Lightning | LNURL-pay protocol + `bolt11` decoder + `bech32` |
 | HTTP client | `axios` |
 | Validation | `express-validator` |
@@ -185,6 +186,10 @@ npm run migrate:down   # roll back last migration
 | `20260319000001_lightning_blink_foundation` | lightning_wallets, lightning_transactions (Blink provider) |
 | `20260319000002_lightning_payment_methods` | payment_method / lnurl columns on lightning_transactions |
 | `20260319000003_lightning_wallet_shared_provider_ids` | Drop unique constraint on provider_wallet_id |
+| `20260321000000_journal_title_mood` | Adds `title`, `mood` to `journal_entries` |
+| `20260321000001_cycle_profile_luteal` | Adds `luteal_phase_length`, `ignore_irregular_cycle` to `cycle_profiles` |
+| `20260322000000_day_logs_units` | Adds `weight_unit`, `temperature_unit`; expands flow CHECK to include `very_heavy` |
+| `20260322000001_journal_symptoms_images` | Adds `symptoms TEXT[]`, `images TEXT[]` to `journal_entries` |
 
 ---
 
@@ -217,7 +222,7 @@ POST /api/v1/auth/logout-all                           [auth]
 ### Forgot password (only OTP flow)
 ```
 POST /api/v1/auth/forgot-password   { email }
-  → 4-digit OTP sent to email (valid 10 min)
+  → 6-digit OTP sent to email (valid 10 min, max 3/hour)
 
 POST /api/v1/auth/verify-otp        { email, otp }
   → { reset_token }  (valid 15 min)
@@ -338,9 +343,11 @@ Response envelope:
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | GET | `/users/profile` | ✓ | Includes phone, lightning_address |
-| PUT | `/users/profile` | ✓ | name, phone, date_of_birth, avatar_url, language |
-| GET | `/users/preferences` | ✓ | |
-| PUT | `/users/preferences` | ✓ | Deep-merged JSONB |
+| PUT | `/users/profile` | ✓ | name, phone, date_of_birth, language |
+| POST | `/users/avatar` | ✓ | JSON avatar: `{ "avatar": "<base64>" }` |
+| POST | `/users/profile/avatar` | ✓ | Multipart — field `file` (image, max 5 MB) |
+| GET | `/users/preferences` | ✓ | Returns `{ reminders: { periodStarts, periodEnds, fertility, ovulation, medicine } }` |
+| PUT | `/users/preferences` | ✓ | Deep-merge into `reminders` key |
 | GET | `/users/health-profile` | ✓ | |
 | PUT | `/users/health-profile` | ✓ | |
 | DELETE | `/users/account` | ✓ | body: `{ password }` |
@@ -349,11 +356,17 @@ Response envelope:
 ### Cycles
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| POST | `/cycles` | ✓ | |
-| GET | `/cycles` | ✓ | |
-| GET | `/cycles/current` | ✓ | With predictions |
-| PUT | `/cycles/:id` | ✓ | |
-| POST | `/cycles/:id/end` | ✓ | |
+| POST | `/cycles/start` | ✓ | Start new period. Syncs `last_period_start` in cycle profile. |
+| PUT | `/cycles/start` | ✓ | Update current period's start date: `{ date }` |
+| POST | `/cycles/end` | ✓ | End current period: `{ end_date }` |
+| PUT | `/cycles/end` | ✓ | Update current period's end date: `{ date }` |
+| GET | `/cycles/current` | ✓ | Phase + predictions + `period_dates`, `fertility_window`, `ovulation_date`, `pregnancy_chance` |
+| GET | `/cycles/predictions` | ✓ | Predictions only |
+| GET | `/cycles/analytics` | ✓ | query: `startDate`, `endDate` |
+| GET | `/cycles` | ✓ | Cycle history. query: `page`, `limit`, `startDate`, `endDate` |
+| GET | `/cycles/:cycleId` | ✓ | Single cycle |
+| PUT | `/cycles/:cycleId` | ✓ | |
+| DELETE | `/cycles/:cycleId` | ✓ | |
 | POST | `/cycles/:cycleId/logs` | ✓ | Add daily log to cycle |
 
 ### Cycle Profile
@@ -364,15 +377,14 @@ Response envelope:
 | GET | `/cycle-profile` | ✓ | Live phase calculations |
 
 ### Daily Logs
+One log per date. PUT is a partial update — only fields in the body are written.
+
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| POST | `/logs` | ✓ | |
-| GET | `/logs` | ✓ | query: `start_date`, `end_date` |
-| GET | `/logs/:date` | ✓ | |
-| POST | `/logs/symptoms` | ✓ | |
-| POST | `/logs/moods` | ✓ | |
-| GET | `/logs/symptoms` | ✓ | |
-| GET | `/logs/moods` | ✓ | |
+| GET | `/logs/:date` | ✓ | Always returns full object with defaults. Never returns null. |
+| GET | `/logs?date=YYYY-MM-DD` | ✓ | Query-param variant |
+| GET | `/logs/range?from=YYYY-MM-DD&to=YYYY-MM-DD` | ✓ | Date range |
+| PUT | `/logs/:date` | ✓ | Upsert. Accepts: `flow_level`, `mood`, `notes`, `symptoms`, `medicine`, `weight`, `weight_unit`, `temperature`, `temperature_unit`, `water_intake_ml`, `period_start`, `period_end` |
 
 ### Water Settings
 | Method | Path | Auth | Notes |
@@ -383,10 +395,12 @@ Response envelope:
 ### Journal
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| POST | `/journal` | ✓ | |
-| GET | `/journal` | ✓ | |
-| GET | `/journal/:id` | ✓ | |
-| PUT | `/journal/:id` | ✓ | |
+| GET | `/journal?month=YYYY-MM` | ✓ | All entries for month, newest first |
+| GET | `/journal/search?q=text&month=YYYY-MM` | ✓ | Full-text search. `month` optional. Max 50 results. |
+| POST | `/journal/media` | ✓ | Multipart, field `files` (up to 5, max 10 MB each). Returns `{ urls: [...] }` |
+| POST | `/journal` | ✓ | Fields: `date/entry_date`, `title`, `content`, `mood`, `symptoms[]`, `images[]` |
+| GET | `/journal/:id` | ✓ | Returns `symptoms`, `images`, `cycle_day` |
+| PUT | `/journal/:id` | ✓ | Partial update — only sent fields change |
 | DELETE | `/journal/:id` | ✓ | |
 
 ### Wallet
@@ -474,11 +488,23 @@ Response envelope:
 | PUT | `/threads/:id/comments/:cId` | ✓ | Owner only |
 | DELETE | `/threads/:id/comments/:cId` | ✓ | Owner or admin |
 
+### Health — Vitals (Add Log Shortcuts)
+Each endpoint upserts one field in `day_logs`. POST and PUT are identical (both upsert).
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST/PUT | `/health/flow` | ✓ | `{ date, flow }` — values: `spotting` · `light` · `medium` · `heavy` · `very_heavy` |
+| POST/PUT | `/health/medicine` | ✓ | `{ date, medicine: [] }` |
+| POST/PUT | `/health/weight` | ✓ | `{ date, weight, weight_unit }` — unit: `kg` or `lb` |
+| GET | `/health/weight` | ✓ | Last 30 days of weight entries |
+| POST/PUT | `/health/temperature` | ✓ | `{ date, temperature, temperature_unit }` — unit: `C` or `F` |
+| GET | `/health/temperature` | ✓ | Last 30 days of temperature entries |
+
 ### Notifications
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | GET | `/notifications` | ✓ | Latest 50 with actor info |
-| PUT | `/notifications/read` | ✓ | Mark all read |
+| PATCH | `/notifications/read-all` | ✓ | Mark all read |
 | PATCH | `/notifications/:id/read` | ✓ | Mark single read |
 
 ---
@@ -491,18 +517,33 @@ All routes mount under `/api/v1` in `src/routes/index.js`:
 router.use('/auth',           authRoutes);
 router.use('/users',          userRoutes);
 router.use('/cycles',         cycleRoutes);
-router.use('/health',         healthRoutes);
+router.use('/health',         healthRoutes);       // symptoms · moods · analytics · flow · weight · temperature · medicine
 router.use('/cycle-profile',  cycleProfileRoutes);
 router.use('/logs',           dayLogsRoutes);
 router.use('/water-settings', waterSettingsRoutes);
-router.use('/journal',        journalRoutes);
+router.use('/journal',        journalRoutes);      // entries · search · media upload
 router.use('/payments',       paymentRoutes);
 router.use('/lightning',      lightningRoutes);
 router.use('/wallet',         walletRoutes);
 router.use('/partner',        partnerRoutes);
 router.use('/chats',          chatRoutes);
 router.use('/groups',         groupRoutes);
-router.use('/',               communityRoutes);   // /threads + /notifications
+router.use('/',               communityRoutes);    // /threads + /notifications
 ```
 
 Health check: `GET /api/v1/health`
+
+---
+
+## Deployment (Render)
+
+- **Build command:** `npm install && npm run migrate`
+- **Start command:** `npm start`
+- `app.set('trust proxy', 1)` is required for the rate limiter to see the real client IP behind Render's proxy.
+- Email is sent via the Resend HTTP SDK — do not configure SMTP (port 25/587 is blocked on Render).
+
+---
+
+## Full API Reference
+
+See **[API.md](./API.md)** for complete request/response shapes, field aliases, enum values, error codes, and rate limit rules.
