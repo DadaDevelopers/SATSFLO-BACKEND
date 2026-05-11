@@ -95,10 +95,6 @@ class AuthService {
       .then(() => logger.info('Verification email sent', { userId: user.id }))
       .catch(err => logger.error('Verification email failed', { error: err.message, userId: user.id }));
 
-    emailService.sendWelcomeEmail(user.email, user.name)
-      .then(() => logger.info('Welcome email sent', { userId: user.id }))
-      .catch(err => logger.error('Welcome email failed', { error: err.message, userId: user.id }));
-
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
@@ -402,7 +398,7 @@ class AuthService {
    */
   async verifyEmail(token) {
     const result = await pool.query(
-      `SELECT id, email_verified, verification_expires
+      `SELECT id, email, name, email_verified, verification_expires
        FROM users WHERE verification_token = $1`,
       [token]
     );
@@ -430,6 +426,14 @@ class AuthService {
     );
 
     logger.info('Email verified', { userId: user.id });
+
+    // Send welcome email on first verification only
+    if (!user.email_verified) {
+      emailService.sendWelcomeEmail(user.email, user.name)
+        .then(() => logger.info('Welcome email sent', { userId: user.id }))
+        .catch(err => logger.error('Welcome email failed', { error: err.message, userId: user.id }));
+    }
+
     return { alreadyVerified: user.email_verified };
   }
 
