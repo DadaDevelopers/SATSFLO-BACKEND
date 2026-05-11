@@ -8,7 +8,7 @@ const router = express.Router();
 const authController = require('../controllers/auth/auth.controller');
 const { authenticateToken } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
-const { authLimiter, passwordResetLimiter, registrationLimiter } = require('../middleware/rateLimiter');
+const { authLimiter, passwordResetLimiter, registrationLimiter, resendVerificationLimiter } = require('../middleware/rateLimiter');
 const {
   registerValidation,
   loginValidation,
@@ -63,6 +63,19 @@ router.post('/logout', authenticateToken, authController.logout);
  * POST /api/v1/auth/logout-all
  */
 router.post('/logout-all', authenticateToken, authController.logoutAll);
+
+/**
+ * GET /api/v1/auth/verify-email/:token
+ * No auth required — user arrives here by clicking the link in their email.
+ * Returns an HTML page.
+ */
+router.get('/verify-email/:token', authController.verifyEmail);
+
+/**
+ * POST /api/v1/auth/resend-verification
+ * Requires Bearer token. Generates a new token and resends the verification email.
+ */
+router.post('/resend-verification', authenticateToken, resendVerificationLimiter, authController.resendVerification);
 
 /**
  * GET /api/v1/auth/me

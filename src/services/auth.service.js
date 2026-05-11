@@ -19,6 +19,8 @@ const logger = require('../utils/logger');
 
 const SALT_ROUNDS = 12;
 
+const VERIFICATION_BASE_URL = process.env.API_BASE_URL || 'https://satsflo-backend.onrender.com/api/v1';
+
 // In-memory per-email OTP rate limit: max 3 requests per hour
 // Works correctly on single-instance deploys (Render free tier)
 const otpRateLimitMap = new Map();
@@ -30,6 +32,19 @@ function checkOtpRateLimit(email) {
   if (timestamps.length >= MAX_REQUESTS) return false;
   timestamps.push(now);
   otpRateLimitMap.set(email, timestamps);
+  return true;
+}
+
+// In-memory per-user resend verification rate limit: max 3 requests per hour
+const resendRateLimitMap = new Map();
+function checkResendRateLimit(userId) {
+  const now = Date.now();
+  const WINDOW_MS = 60 * 60 * 1000;
+  const MAX_REQUESTS = 3;
+  const timestamps = (resendRateLimitMap.get(userId) || []).filter(t => now - t < WINDOW_MS);
+  if (timestamps.length >= MAX_REQUESTS) return false;
+  timestamps.push(now);
+  resendRateLimitMap.set(userId, timestamps);
   return true;
 }
 
@@ -53,7 +68,7 @@ class AuthService {
 
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, name, role, status, email_verified, created_at)
-       VALUES ($1, $2, $3, 'user', 'active', true, NOW())
+       VALUES ($1, $2, $3, 'user', 'active', false, NOW())
        RETURNING id, email, name, role, created_at`,
       [email.toLowerCase(), passwordHash, name]
     );
@@ -71,8 +86,16 @@ class AuthService {
       [user.id]
     );
 
-    // Non-blocking — registration succeeds even if email fails
-    emailService.sendWelcomeEmail(email, name)
+    // Generate email verification token and send verification email
+    const { token: verificationToken } = await this.generateAndStoreVerificationToken(user.id);
+    const verificationUrl = `${VERIFICATION_BASE_URL}/auth/verify-email/${verificationToken}`;
+
+    // Non-blocking — registration succeeds even if emails fail
+    emailService.sendVerificationEmail(user.email, user.name, verificationUrl)
+      .then(() => logger.info('Verification email sent', { userId: user.id }))
+      .catch(err => logger.error('Verification email failed', { error: err.message, userId: user.id }));
+
+    emailService.sendWelcomeEmail(user.email, user.name)
       .then(() => logger.info('Welcome email sent', { userId: user.id }))
       .catch(err => logger.error('Welcome email failed', { error: err.message, userId: user.id }));
 
@@ -87,7 +110,7 @@ class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        emailVerified: true
+        emailVerified: false
       },
       ...tokens
     };
@@ -355,6 +378,97 @@ class AuthService {
 
     logger.info('Password reset completed', { userId: resetRecord.user_id });
     return { message: 'Password reset successfully' };
+  }
+
+  /**
+   * Generate and store a 24h email verification token for a user.
+   * Overwrites any existing token — safe to call on register and resend.
+   */
+  async generateAndStoreVerificationToken(userId) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await pool.query(
+      `UPDATE users
+       SET verification_token = $1, verification_expires = $2
+       WHERE id = $3`,
+      [token, expires, userId]
+    );
+    return { token, expires };
+  }
+
+  /**
+   * Mark a user's email as verified using the token from the verification link.
+   * Idempotent: succeeds silently if the email was already verified.
+   */
+  async verifyEmail(token) {
+    const result = await pool.query(
+      `SELECT id, email_verified, verification_expires
+       FROM users WHERE verification_token = $1`,
+      [token]
+    );
+    const user = result.rows[0];
+
+    if (!user) {
+      const err = new Error('Invalid or expired verification link');
+      err.statusCode = 400;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    if (new Date(user.verification_expires) < new Date()) {
+      const err = new Error('Verification link has expired');
+      err.statusCode = 400;
+      err.code = 'EXPIRED_TOKEN';
+      throw err;
+    }
+
+    await pool.query(
+      `UPDATE users
+       SET email_verified = true, verification_token = NULL, verification_expires = NULL
+       WHERE id = $1`,
+      [user.id]
+    );
+
+    logger.info('Email verified', { userId: user.id });
+    return { alreadyVerified: user.email_verified };
+  }
+
+  /**
+   * Resend a verification email for the authenticated user.
+   * Rate-limited to 3 requests per hour per user.
+   */
+  async resendVerification(userId) {
+    if (!checkResendRateLimit(userId)) {
+      const err = new Error('Too many verification emails. Please wait before trying again.');
+      err.statusCode = 429;
+      throw err;
+    }
+
+    const result = await pool.query(
+      'SELECT id, email, name, email_verified FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = result.rows[0];
+
+    if (!user) {
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (user.email_verified) {
+      const err = new Error('Email is already verified');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const { token } = await this.generateAndStoreVerificationToken(userId);
+    const verificationUrl = `${VERIFICATION_BASE_URL}/auth/verify-email/${token}`;
+
+    await emailService.sendVerificationEmail(user.email, user.name, verificationUrl);
+
+    logger.info('Verification email resent', { userId });
+    return { message: 'Verification email sent. Please check your inbox.' };
   }
 
   /**
