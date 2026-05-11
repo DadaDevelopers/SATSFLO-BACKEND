@@ -163,6 +163,93 @@ const resetPassword = async (req, res, next) => {
 };
 
 /**
+ * GET /api/v1/auth/verify-email/:token
+ * No auth required — user clicks this link in their email client.
+ * Returns an HTML page, not JSON.
+ */
+const verifyEmail = async (req, res) => {
+  const { token } = req.params;
+
+  const successPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Verified - SatsFlo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 40px 16px; background: #F9FAFB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .card { max-width: 480px; margin: 40px auto; background: #fff; border-radius: 16px; padding: 48px 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+    .logo { display: inline-block; background: #FF4081; color: #fff; font-size: 20px; font-weight: 700; padding: 8px 18px; border-radius: 10px; margin-bottom: 32px; letter-spacing: -0.5px; }
+    .icon { width: 64px; height: 64px; background: #ECFDF5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 32px; color: #059669; line-height: 64px; }
+    h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; color: #111827; }
+    p { margin: 0; font-size: 15px; color: #6B7280; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">SatsFlo</div>
+    <div class="icon">&#10003;</div>
+    <h1>Email Verified</h1>
+    <p>Your SatsFlo account is now verified.<br/>Open the SatsFlo app to continue.</p>
+  </div>
+</body>
+</html>`;
+
+  const errorPage = (message, showResendHint) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verification Failed - SatsFlo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 40px 16px; background: #F9FAFB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .card { max-width: 480px; margin: 40px auto; background: #fff; border-radius: 16px; padding: 48px 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+    .logo { display: inline-block; background: #FF4081; color: #fff; font-size: 20px; font-weight: 700; padding: 8px 18px; border-radius: 10px; margin-bottom: 32px; letter-spacing: -0.5px; }
+    .icon { width: 64px; height: 64px; background: #FEF2F2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 28px; color: #DC2626; line-height: 64px; }
+    h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; color: #111827; }
+    p { margin: 0 0 8px; font-size: 15px; color: #6B7280; line-height: 1.6; }
+    .hint { margin-top: 20px; font-size: 13px; color: #9CA3AF; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">SatsFlo</div>
+    <div class="icon">&#10007;</div>
+    <h1>Verification Failed</h1>
+    <p>${message}</p>
+    ${showResendHint ? '<p class="hint">Open the SatsFlo app and tap <strong>Resend verification email</strong> to get a new link.</p>' : ''}
+  </div>
+</body>
+</html>`;
+
+  try {
+    await authService.verifyEmail(token);
+    return res.setHeader('Content-Type', 'text/html').send(successPage);
+  } catch (error) {
+    const message = error.code === 'EXPIRED_TOKEN'
+      ? 'This verification link has expired. Links are valid for 24 hours.'
+      : 'This verification link is invalid or has already been used.';
+    return res.status(400).setHeader('Content-Type', 'text/html').send(errorPage(message, true));
+  }
+};
+
+/**
+ * POST /api/v1/auth/resend-verification
+ * Requires Bearer token — user must be logged in.
+ * Generates a new token and resends the verification email.
+ */
+const resendVerification = async (req, res, next) => {
+  try {
+    const result = await authService.resendVerification(req.user.id);
+    return ApiResponse.success(res, null, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/v1/auth/me
  */
 const getCurrentUser = async (req, res, next) => {
@@ -191,5 +278,7 @@ module.exports = {
   forgotPassword,
   verifyOtp,
   resetPassword,
+  verifyEmail,
+  resendVerification,
   getCurrentUser
 };

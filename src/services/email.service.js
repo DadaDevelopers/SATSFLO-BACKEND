@@ -134,7 +134,55 @@ const sendOTPEmail = async (email, name, otp) => {
   });
 };
 
-// ─── 2. Welcome email ──────────────────────────────────────────────────────────
+// ─── 2. Verification email ─────────────────────────────────────────────────────
+
+const sendVerificationEmail = async (email, name, verificationUrl) => {
+  const firstName = name ? name.split(' ')[0] : name;
+
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
+      Verify your email address
+    </h1>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      Hi <strong>${firstName}</strong>,<br/><br/>
+      Please verify your email address to secure your SatsFlo account.
+      Click the button below — this link expires in 24 hours.
+    </p>
+
+    <!-- CTA button -->
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+      <tr>
+        <td style="background:${BRAND_COLOR};border-radius:10px;">
+          <a href="${verificationUrl}"
+             style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                    color:#ffffff;text-decoration:none;letter-spacing:0.2px;">
+            Verify My Email
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    ${divider()}
+    <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6;">
+      If the button does not work, copy and paste this link into your browser:
+    </p>
+    <p style="margin:0;font-size:12px;color:#9CA3AF;word-break:break-all;">
+      ${verificationUrl}
+    </p>
+    ${divider()}
+    <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
+      If you did not create a SatsFlo account, you can safely ignore this email.
+    </p>
+  `;
+
+  await send({
+    to: email,
+    subject: 'Verify your SatsFlo email address',
+    html: layout('Verify your SatsFlo email address', body),
+  });
+};
+
+// ─── 3. Welcome email ──────────────────────────────────────────────────────────
 
 const sendWelcomeEmail = async (email, name) => {
   const firstName = name ? name.split(' ')[0] : name;
@@ -186,6 +234,7 @@ const sendWelcomeEmail = async (email, name) => {
 
 module.exports = {
   sendOTPEmail,
+  sendVerificationEmail,
   sendWelcomeEmail,
   // alias used by forgotPassword service
   sendPasswordResetEmail: sendOTPEmail,
