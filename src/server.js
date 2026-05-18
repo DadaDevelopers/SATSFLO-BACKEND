@@ -13,6 +13,8 @@ const app = require('./app');
 const { pool } = require('./config/database');
 const logger = require('./utils/logger');
 const emailService = require('./services/email.service');
+const firebase = require('./services/firebase.service');
+const periodReminder = require('./jobs/periodReminder');
 
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -29,6 +31,10 @@ async function startServer() {
 
     // Initialize email service
     await emailService.initialize();
+
+    // Initialize Firebase and start cron jobs
+    firebase.initialize();
+    periodReminder.start();
 
     // Start HTTP server
     server = app.listen(PORT, () => {

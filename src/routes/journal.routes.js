@@ -48,6 +48,9 @@ router.get('/:id', journalController.getById);
 // Body: any subset of POST fields
 router.put('/:id', journalController.update);
 
+// DELETE /api/v1/journal  — delete all entries for the authenticated user
+router.delete('/', journalController.deleteAll);
+
 // DELETE /api/v1/journal/:id
 router.delete('/:id', journalController.delete);
 

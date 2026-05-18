@@ -352,6 +352,16 @@ class UserService {
   }
 
   /**
+   * Save / update FCM device token
+   */
+  async saveDeviceToken(userId, token, platform) {
+    await pool.query(
+      `UPDATE users SET fcm_token = $1, fcm_platform = $2, updated_at = NOW() WHERE id = $3`,
+      [token, platform, userId]
+    );
+  }
+
+  /**
    * Search users (admin)
    */
   async searchUsers({ query, page = 1, limit = 20 }) {

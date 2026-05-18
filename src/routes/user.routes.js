@@ -117,6 +117,15 @@ router.put(
   userController.updatePreferences
 );
 
+// ==================== DEVICE TOKEN ====================
+
+/**
+ * @route   POST /api/v1/users/device-token
+ * @desc    Store FCM push token for the authenticated user
+ * @access  Private
+ */
+router.post('/device-token', userController.saveDeviceToken);
+
 // ==================== ACCOUNT ====================
 
 /**

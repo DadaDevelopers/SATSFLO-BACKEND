@@ -185,6 +185,14 @@ class JournalService {
       const err = new Error('Journal entry not found'); err.statusCode = 404; throw err;
     }
   }
+
+  async deleteAll(userId) {
+    const result = await pool.query(
+      `DELETE FROM ${TABLE} WHERE user_id = $1`,
+      [userId]
+    );
+    return result.rowCount;
+  }
 }
 
 module.exports = new JournalService();
