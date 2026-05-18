@@ -153,6 +153,16 @@ const journalController = {
     }
   },
 
+  // DELETE /journal
+  async deleteAll(req, res) {
+    try {
+      const count = await journalService.deleteAll(req.user.id);
+      return ApiResponse.success(res, { deleted_count: count }, 'Journal cleared');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   // POST /journal/media  — multipart { files } → returns base64 data URLs
   async uploadMedia(req, res) {
     try {

@@ -145,6 +145,26 @@ const exportData = async (req, res, next) => {
   }
 };
 
+/**
+ * Save FCM device token
+ * POST /api/v1/users/device-token
+ */
+const saveDeviceToken = async (req, res, next) => {
+  try {
+    const { token, platform } = req.body;
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return ApiResponse.validationError(res, [{ field: 'token', message: 'token is required' }]);
+    }
+    if (!platform || !['ios', 'android'].includes(platform)) {
+      return ApiResponse.validationError(res, [{ field: 'platform', message: 'platform must be ios or android' }]);
+    }
+    await userService.saveDeviceToken(req.user.id, token.trim(), platform);
+    return ApiResponse.success(res, null, 'Device token saved');
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ==================== ADMIN ENDPOINTS ====================
 
 /**
@@ -186,6 +206,7 @@ module.exports = {
   updateHealthProfile,
   getPreferences,
   updatePreferences,
+  saveDeviceToken,
   deleteAccount,
   exportData,
   getUserById,
