@@ -16,6 +16,22 @@ const MESSAGES = {
   5: 'Your period is coming up in 5 days. Heads up!',
 };
 
+const DEFAULT_REMINDERS = {
+  periodStarts: true,
+  periodEnds: true,
+  fertility: false,
+  ovulation: false,
+  medicine: false,
+};
+
+function normalizeReminders(preferences) {
+  const reminders = preferences?.reminders || {};
+  return {
+    ...DEFAULT_REMINDERS,
+    ...reminders,
+  };
+}
+
 async function runPeriodReminders() {
   logger.info('Period reminder job started');
 
@@ -25,40 +41,110 @@ async function runPeriodReminders() {
          u.id,
          u.name,
          u.fcm_token,
+         u.preferences,
+         cp.cycle_length,
+         cp.period_length,
+         cp.luteal_phase_length,
+         ((CURRENT_DATE - cp.last_period_start) % cp.cycle_length) + 1 AS current_day,
          (cp.cycle_length - (((CURRENT_DATE - cp.last_period_start) % cp.cycle_length) + 1)) AS days_until_period
        FROM users u
        JOIN cycle_profiles cp ON cp.user_id = u.id
        WHERE u.fcm_token IS NOT NULL
          AND u.status = 'active'
-         AND cp.last_period_start IS NOT NULL
-         AND (cp.cycle_length - (((CURRENT_DATE - cp.last_period_start) % cp.cycle_length) + 1))
-             = ANY($1::int[])`,
-      [REMINDER_DAYS]
+         AND cp.last_period_start IS NOT NULL`
     );
 
-    logger.info(`Period reminder: ${result.rows.length} user(s) to notify`);
+    logger.info(`Period reminder: ${result.rows.length} user(s) evaluated`);
 
     for (const user of result.rows) {
-      const days = Number(user.days_until_period);
-      const body = MESSAGES[days] ?? `Your period is in ${days} day(s).`;
+      const preferences = normalizeReminders(user.preferences || {});
+      const currentDay = Number(user.current_day);
+      const cycleLength = Number(user.cycle_length);
+      const periodLength = Number(user.period_length) || 5;
+      const lutealPhaseLength = Number(user.luteal_phase_length) || 14;
+      const daysUntilPeriod = Number(user.days_until_period);
+      const ovulationDay = cycleLength - lutealPhaseLength;
+      const daysUntilOvulation = ovulationDay >= currentDay
+        ? ovulationDay - currentDay
+        : cycleLength - currentDay + ovulationDay;
 
-      try {
-        await firebase.sendPush(
-          user.fcm_token,
-          'Period reminder',
-          body,
-          { type: 'period_reminder', days_until_period: String(days) }
-        );
-        logger.info('Push sent', { userId: user.id, days });
-      } catch (err) {
-        // If token is invalid, clear it so we don't keep trying
-        if (err.code === 'messaging/registration-token-not-registered' ||
-            err.code === 'messaging/invalid-registration-token') {
-          await pool.query(
-            'UPDATE users SET fcm_token = NULL, fcm_platform = NULL WHERE id = $1',
-            [user.id]
+      const notifications = [];
+
+      if (REMINDER_DAYS.includes(daysUntilPeriod)) {
+        notifications.push({
+          title: 'Period reminder',
+          body: MESSAGES[daysUntilPeriod],
+          data: { type: 'period_reminder', days_until_period: String(daysUntilPeriod) }
+        });
+      }
+
+      if (preferences.periodStarts && daysUntilPeriod === 0) {
+        notifications.push({
+          title: 'Period starts today',
+          body: 'Your period starts today. Be ready and take care of yourself.',
+          data: { type: 'period_starts', days_until_period: '0' }
+        });
+      }
+
+      if (preferences.periodEnds && currentDay === periodLength) {
+        notifications.push({
+          title: 'Period ending soon',
+          body: 'Today is the expected last day of your period. Remember to log the end when it finishes.',
+          data: { type: 'period_ends', current_day: String(currentDay), period_length: String(periodLength) }
+        });
+      }
+
+      if (preferences.fertility && daysUntilOvulation === 5) {
+        notifications.push({
+          title: 'Fertility window starting',
+          body: 'Your fertile window begins in 5 days. Stay aware and plan accordingly.',
+          data: { type: 'fertility_reminder', days_until_ovulation: String(daysUntilOvulation) }
+        });
+      }
+
+      if (preferences.ovulation && daysUntilOvulation === 0) {
+        notifications.push({
+          title: 'Ovulation starts today',
+          body: 'Your ovulation starts today. Track symptoms or fertility activity as needed.',
+          data: { type: 'ovulation_reminder', days_until_ovulation: '0' }
+        });
+      }
+
+      if (preferences.medicine) {
+        notifications.push({
+          title: 'Medicine reminder',
+          body: 'Don’t forget to take your pills today.',
+          data: { type: 'medicine_reminder' }
+        });
+      }
+
+      if (notifications.length === 0) {
+        continue;
+      }
+
+      for (const notification of notifications) {
+        try {
+          await firebase.sendPush(
+            user.fcm_token,
+            notification.title,
+            notification.body,
+            notification.data
           );
-          logger.info('Cleared stale FCM token', { userId: user.id });
+          logger.info('Push sent', {
+            userId: user.id,
+            type: notification.data.type,
+            days_until_period: notification.data.days_until_period,
+            days_until_ovulation: notification.data.days_until_ovulation,
+          });
+        } catch (err) {
+          if (err.code === 'messaging/registration-token-not-registered' ||
+              err.code === 'messaging/invalid-registration-token') {
+            await pool.query(
+              'UPDATE users SET fcm_token = NULL, fcm_platform = NULL WHERE id = $1',
+              [user.id]
+            );
+            logger.info('Cleared stale FCM token', { userId: user.id });
+          }
         }
       }
     }
@@ -69,7 +155,6 @@ async function runPeriodReminders() {
   logger.info('Period reminder job finished');
 }
 
-// Run daily at 9:00 AM server time
 function start() {
   cron.schedule('0 9 * * *', runPeriodReminders);
   logger.info('Period reminder cron scheduled (daily 09:00)');
