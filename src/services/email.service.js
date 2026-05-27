@@ -163,13 +163,6 @@ const sendVerificationEmail = async (email, name, verificationUrl) => {
     </table>
 
     ${divider()}
-    <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6;">
-      If the button does not work, copy and paste this link into your browser:
-    </p>
-    <p style="margin:0;font-size:12px;color:#9CA3AF;word-break:break-all;">
-      ${verificationUrl}
-    </p>
-    ${divider()}
     <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
       If you did not create a SatsFlo account, you can safely ignore this email.
     </p>
