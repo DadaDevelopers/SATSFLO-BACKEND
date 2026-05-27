@@ -23,7 +23,7 @@ const VERIFICATION_BASE_URL =
   process.env.VERIFICATION_BASE_URL ||
   process.env.API_BASE_URL ||
   process.env.APP_BASE_URL ||
-  'https://satsflo.app/api/v1';
+  'https://satsflo-backend.onrender.com/api/v1';
 
 // In-memory per-email OTP rate limit: max 3 requests per hour
 // Works correctly on single-instance deploys (Render free tier)
