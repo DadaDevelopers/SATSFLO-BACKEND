@@ -145,7 +145,16 @@ async function runPeriodReminders() {
             );
             logger.info('Cleared stale FCM token', { userId: user.id });
           }
+          // Skip DB insert if push failed
+          continue;
         }
+
+        // Persist to notifications table so it appears in the in-app list
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, message, is_read, created_at)
+           VALUES ($1, $2, $3, false, NOW())`,
+          [user.id, notification.data.type, notification.body]
+        );
       }
     }
   } catch (err) {

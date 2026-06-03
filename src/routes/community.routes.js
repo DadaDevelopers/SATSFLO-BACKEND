@@ -25,7 +25,9 @@ router.delete('/threads/:id/like', authenticateToken, communityController.unlike
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────
 router.get('/notifications',                          authenticateToken, communityController.getNotifications);
+router.get('/notifications/unread-count',             authenticateToken, communityController.getUnreadCount);
 router.patch('/notifications/read-all',               authenticateToken, communityController.markAllRead);
+router.post('/notifications/read-all',                authenticateToken, communityController.markAllRead);
 router.patch('/notifications/:notificationId/read',   authenticateToken, communityController.markNotificationRead);
 
 module.exports = router;
