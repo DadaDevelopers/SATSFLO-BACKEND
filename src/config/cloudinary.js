@@ -1,7 +1,6 @@
 'use strict';
 
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
 cloudinary.config({
@@ -10,26 +9,20 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const avatarStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'satsflo/avatars',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }],
-  },
-});
+// Upload a buffer to Cloudinary and return the result
+function uploadBuffer(buffer, options = {}) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
 
-const journalStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'satsflo/journal',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1080, quality: 'auto' }],
-  },
-});
-
+// Multer — memory storage only (buffers are piped to Cloudinary in the controller)
 const uploadAvatar = multer({
-  storage: avatarStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
     if (file.mimetype.startsWith('image/')) return cb(null, true);
@@ -38,7 +31,7 @@ const uploadAvatar = multer({
 });
 
 const uploadJournalImages = multer({
-  storage: journalStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 5 },
   fileFilter(_req, file, cb) {
     if (file.mimetype.startsWith('image/')) return cb(null, true);
@@ -46,4 +39,4 @@ const uploadJournalImages = multer({
   },
 });
 
-module.exports = { cloudinary, uploadAvatar, uploadJournalImages };
+module.exports = { cloudinary, uploadBuffer, uploadAvatar, uploadJournalImages };
