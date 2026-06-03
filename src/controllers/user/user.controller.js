@@ -7,6 +7,7 @@
 const userService = require('../../services/user.service');
 const ApiResponse = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { uploadBuffer } = require('../../config/cloudinary');
 
 /**
  * Get current user profile
@@ -93,17 +94,20 @@ const updatePreferences = async (req, res, next) => {
  */
 const uploadAvatar = async (req, res, next) => {
   try {
-    // multipart upload via Cloudinary — URL is in req.file.path
-    const avatarUrl = req.file?.path ?? req.body.avatar ?? req.body.avatar_url;
-
-    if (!avatarUrl || typeof avatarUrl !== 'string' || avatarUrl.trim().length === 0) {
+    if (!req.file) {
       return ApiResponse.validationError(res, [{
         field: 'file',
         message: 'Provide an image file (multipart/form-data with field "file")',
       }]);
     }
 
-    const result = await userService.updateAvatar(req.user.id, avatarUrl.trim());
+    const uploaded = await uploadBuffer(req.file.buffer, {
+      folder: 'satsflo/avatars',
+      transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }],
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    });
+
+    const result = await userService.updateAvatar(req.user.id, uploaded.secure_url);
     return ApiResponse.success(res, { avatar_url: result.avatar_url }, 'Avatar updated');
   } catch (error) {
     next(error);

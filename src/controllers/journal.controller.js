@@ -2,6 +2,7 @@
 
 const journalService = require('../services/journal.service');
 const ApiResponse = require('../utils/response');
+const { uploadBuffer } = require('../config/cloudinary');
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
@@ -163,7 +164,7 @@ const journalController = {
     }
   },
 
-  // POST /journal/media  — multipart { files } → returns Cloudinary URLs
+  // POST /journal/media  — multipart { files[] } → returns Cloudinary URLs
   async uploadMedia(req, res) {
     try {
       if (!req.files || req.files.length === 0) {
@@ -172,7 +173,14 @@ const journalController = {
         ]);
       }
 
-      const urls = req.files.map(file => file.path);
+      const results = await Promise.all(
+        req.files.map(file => uploadBuffer(file.buffer, {
+          folder: 'satsflo/journal',
+          transformation: [{ width: 1080, quality: 'auto' }],
+          allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        }))
+      );
+      const urls = results.map(r => r.secure_url);
 
       return ApiResponse.success(res, { urls }, 'Media uploaded');
     } catch (err) {
