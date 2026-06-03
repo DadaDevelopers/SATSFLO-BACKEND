@@ -1,24 +1,12 @@
 'use strict';
 
 const { Router } = require('express');
-const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
 const journalController = require('../controllers/journal.controller');
+const { uploadJournalImages } = require('../config/cloudinary');
 
 const router = Router();
 router.use(authenticateToken);
-
-// Multer: memory storage, max 10 MB per file, max 5 files, images + video
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
-  fileFilter(_req, file, cb) {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
-      return cb(null, true);
-    }
-    cb(new Error('Only image and video files are allowed'));
-  },
-});
 
 // ── List & Search ────────────────────────────────────────────────────────────
 
@@ -33,7 +21,7 @@ router.get('/search', journalController.search);
 // POST /api/v1/journal/media  — multipart/form-data { files[] }
 // Returns { urls: ["data:image/jpeg;base64,..."] }
 // Use these URLs in the images[] array when creating / updating an entry.
-router.post('/media', upload.array('files', 5), journalController.uploadMedia);
+router.post('/media', uploadJournalImages.array('files', 5), journalController.uploadMedia);
 
 // ── Single entry CRUD ────────────────────────────────────────────────────────
 

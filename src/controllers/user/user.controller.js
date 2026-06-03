@@ -93,25 +93,17 @@ const updatePreferences = async (req, res, next) => {
  */
 const uploadAvatar = async (req, res, next) => {
   try {
-    let avatarData;
+    // multipart upload via Cloudinary — URL is in req.file.path
+    const avatarUrl = req.file?.path ?? req.body.avatar ?? req.body.avatar_url;
 
-    if (req.file) {
-      // multipart upload — convert buffer to base64 data URL
-      const mime = req.file.mimetype;
-      const b64  = req.file.buffer.toString('base64');
-      avatarData = `data:${mime};base64,${b64}`;
-    } else {
-      avatarData = req.body.avatar ?? req.body.avatar_base64 ?? req.body.avatar_url;
-    }
-
-    if (!avatarData || typeof avatarData !== 'string' || avatarData.trim().length === 0) {
+    if (!avatarUrl || typeof avatarUrl !== 'string' || avatarUrl.trim().length === 0) {
       return ApiResponse.validationError(res, [{
         field: 'file',
-        message: 'Provide a file (multipart) or avatar (base64/URL) in the request body',
+        message: 'Provide an image file (multipart/form-data with field "file")',
       }]);
     }
 
-    const result = await userService.updateAvatar(req.user.id, avatarData.trim());
+    const result = await userService.updateAvatar(req.user.id, avatarUrl.trim());
     return ApiResponse.success(res, { avatar_url: result.avatar_url }, 'Avatar updated');
   } catch (error) {
     next(error);

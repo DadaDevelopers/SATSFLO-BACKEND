@@ -5,23 +5,11 @@
  */
 
 const express = require('express');
-const multer = require('multer');
 const router = express.Router();
 
 const userController = require('../controllers/user/user.controller');
 const { authenticateToken, authorize } = require('../middleware/auth');
-
-// In-memory multer — 5 MB limit, images only
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter(req, file, cb) {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed'));
-    }
-    cb(null, true);
-  },
-});
+const { uploadAvatar } = require('../config/cloudinary');
 const { validate } = require('../middleware/validator');
 const { sensitiveDataLimiter } = require('../middleware/rateLimiter');
 const {
@@ -69,7 +57,7 @@ router.post('/avatar', userController.uploadAvatar);
  * @desc    Upload avatar — multipart/form-data { file } or JSON { avatar }
  * @access  Private
  */
-router.post('/profile/avatar', upload.single('file'), userController.uploadAvatar);
+router.post('/profile/avatar', uploadAvatar.single('file'), userController.uploadAvatar);
 
 // ==================== HEALTH PROFILE ====================
 
