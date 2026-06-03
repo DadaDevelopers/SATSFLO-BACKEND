@@ -252,7 +252,6 @@ class CycleService {
     today.setUTCHours(0, 0, 0, 0);
     const startDate = new Date(cycle.start_date);
     startDate.setUTCHours(0, 0, 0, 0);
-    const dayOfCycle = Math.max(1, Math.floor((today - startDate) / 86_400_000) + 1);
 
     // Prefer user-saved cycle_profiles settings over computed health_profiles averages
     const [cpResult, hpResult] = await Promise.all([
@@ -273,12 +272,13 @@ class CycleService {
     const lutealLength   = cp?.luteal_phase_length ?? 14;
     const ovulationDay   = cycleLength - lutealLength;
 
-    const phase       = this.calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay);
-    const predictions = this.calculatePredictions(cycle, cycleLength, periodLength);
+    // Use modulo so dayOfCycle stays within [1, cycleLength] across multiple cycles
+    const daysSinceStart = Math.floor((today - startDate) / 86_400_000);
+    const cyclesPassed   = Math.floor(daysSinceStart / cycleLength);
+    const dayOfCycle     = (daysSinceStart % cycleLength) + 1;
 
-    // Absolute-date calendar arrays (all UTC)
-    const startDateObj = new Date(cycle.start_date);
-    startDateObj.setUTCHours(0, 0, 0, 0);
+    const phase       = this.calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay);
+    const predictions = this.calculatePredictions(startDate, cycleLength, periodLength, cyclesPassed, today);
 
     const addDays = (base, n) => {
       const d = new Date(base);
@@ -286,18 +286,20 @@ class CycleService {
       return d.toISOString().split('T')[0];
     };
 
-    // period_dates: start_date through start_date + periodLength - 1
-    const period_dates = Array.from({ length: periodLength }, (_, i) => addDays(startDateObj, i));
+    // Current cycle started at: startDate + cyclesPassed * cycleLength
+    const currentCycleStart = new Date(startDate);
+    currentCycleStart.setUTCDate(currentCycleStart.getUTCDate() + cyclesPassed * cycleLength);
 
-    // ovulation_date: cycle day ovulationDay → startDate + (ovulationDay - 1) days
-    const ovulation_date = addDays(startDateObj, ovulationDay - 1);
+    // period_dates: current cycle start through + periodLength - 1
+    const period_dates = Array.from({ length: periodLength }, (_, i) => addDays(currentCycleStart, i));
 
-    // fertility_window: 5 days before ovulation day up to (but not including) ovulation day
-    const fertility_window = Array.from({ length: 5 }, (_, i) =>
-      addDays(startDateObj, ovulationDay - 6 + i)
+    // ovulation_date and fertility_window relative to current cycle start
+    const ovulation_date    = addDays(currentCycleStart, ovulationDay - 1);
+    const fertility_window  = Array.from({ length: 5 }, (_, i) =>
+      addDays(currentCycleStart, ovulationDay - 6 + i)
     );
 
-    // pregnancy_chance based on where today falls in the cycle
+    // pregnancy_chance based on position in current cycle
     let pregnancy_chance;
     if (dayOfCycle >= ovulationDay - 5 && dayOfCycle <= ovulationDay + 1) {
       pregnancy_chance = 'High';
@@ -542,39 +544,143 @@ class CycleService {
   }
 
   /**
-   * Calculate predictions for next period/ovulation
+   * Calculate predictions for next period/ovulation.
+   * startDate and today are pre-normalised Date objects (UTC midnight).
+   * cyclesPassed is how many full cycles have elapsed since startDate.
    */
-  calculatePredictions(cycle, avgCycleLength, avgPeriodLength) {
-    const startDate = new Date(cycle.start_date);
-    const today = new Date();
+  calculatePredictions(startDate, avgCycleLength, avgPeriodLength, cyclesPassed, today) {
+    const addDays = (base, n) => {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d;
+    };
 
-    const nextPeriodDate = new Date(startDate);
-    nextPeriodDate.setDate(nextPeriodDate.getDate() + avgCycleLength);
-    const daysUntilPeriod = Math.ceil((nextPeriodDate - today) / (1000 * 60 * 60 * 24));
+    // Next period starts at beginning of next cycle
+    const nextPeriodDate    = addDays(startDate, (cyclesPassed + 1) * avgCycleLength);
+    const nextPeriodEndDate = addDays(nextPeriodDate, avgPeriodLength - 1);
+    const daysUntilPeriod   = Math.round((nextPeriodDate - today) / 86_400_000);
 
-    const ovulationDate = new Date(nextPeriodDate);
-    ovulationDate.setDate(ovulationDate.getDate() - 14);
-    const daysUntilOvulation = Math.ceil((ovulationDate - today) / (1000 * 60 * 60 * 24));
+    // Ovulation for the NEXT cycle = next period start - 14 days
+    const ovulationDate      = addDays(nextPeriodDate, -14);
+    const daysUntilOvulation = Math.round((ovulationDate - today) / 86_400_000);
 
-    const fertileStart = new Date(ovulationDate);
-    fertileStart.setDate(fertileStart.getDate() - 5);
-    const fertileEnd = new Date(ovulationDate);
-    fertileEnd.setDate(fertileEnd.getDate() + 1);
+    const fertileStart = addDays(ovulationDate, -5);
+    const fertileEnd   = addDays(ovulationDate, 1);
+
+    const fmt = d => d.toISOString().split('T')[0];
 
     return {
       nextPeriod: {
-        date: nextPeriodDate.toISOString().split('T')[0],
-        daysUntil: daysUntilPeriod
+        date:     fmt(nextPeriodDate),
+        endDate:  fmt(nextPeriodEndDate),
+        daysUntil: daysUntilPeriod,
       },
       ovulation: {
-        date: ovulationDate.toISOString().split('T')[0],
-        daysUntil: daysUntilOvulation
+        date:     fmt(ovulationDate),
+        daysUntil: daysUntilOvulation,
       },
       fertileWindow: {
-        start: fertileStart.toISOString().split('T')[0],
-        end: fertileEnd.toISOString().split('T')[0]
-      }
+        start: fmt(fertileStart),
+        end:   fmt(fertileEnd),
+      },
     };
+  }
+
+  /**
+   * Return phase date ranges for the current cycle (for the wheel segments).
+   */
+  async getPhases(userId) {
+    const current = await this.getCurrentCycle(userId);
+    if (!current) return null;
+
+    const { cycleLength, periodLength, ovulationDay, dayOfCycle } = current;
+
+    // Rebuild current cycle start from the last recorded cycle + cyclesPassed
+    const lastCycle = await pool.query(
+      'SELECT start_date FROM cycles WHERE user_id = $1 ORDER BY start_date DESC LIMIT 1',
+      [userId]
+    );
+    const startDate = new Date(lastCycle.rows[0].start_date);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const daysSince   = Math.floor((today - startDate) / 86_400_000);
+    const cyclesPassed = Math.floor(daysSince / cycleLength);
+
+    const cycleStart = new Date(startDate);
+    cycleStart.setUTCDate(cycleStart.getUTCDate() + cyclesPassed * cycleLength);
+
+    const addDays = (n) => {
+      const d = new Date(cycleStart);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().split('T')[0];
+    };
+
+    return {
+      current_day: dayOfCycle,
+      cycle_start: cycleStart.toISOString().split('T')[0],
+      phases: {
+        menstrual:  { start: addDays(0),             end: addDays(periodLength - 1),  days: periodLength },
+        follicular: { start: addDays(periodLength),   end: addDays(ovulationDay - 3),  days: ovulationDay - 2 - periodLength },
+        ovulation:  { start: addDays(ovulationDay - 2), end: addDays(ovulationDay + 2), days: 5 },
+        luteal:     { start: addDays(ovulationDay + 3), end: addDays(cycleLength - 1),  days: cycleLength - ovulationDay - 3 },
+      },
+    };
+  }
+
+  /**
+   * Return upcoming period + ovulation predictions for N months.
+   */
+  async getForecast(userId, months = 3) {
+    const lastCycle = await pool.query(
+      'SELECT start_date FROM cycles WHERE user_id = $1 ORDER BY start_date DESC LIMIT 1',
+      [userId]
+    );
+    if (!lastCycle.rows[0]) return null;
+
+    const [cpResult, hpResult] = await Promise.all([
+      pool.query('SELECT cycle_length, period_length, luteal_phase_length FROM cycle_profiles WHERE user_id = $1', [userId]),
+      pool.query('SELECT average_cycle_length, average_period_length FROM health_profiles WHERE user_id = $1', [userId]),
+    ]);
+    const cp = cpResult.rows[0];
+    const hp = hpResult.rows[0];
+    const cycleLength  = cp?.cycle_length  || hp?.average_cycle_length  || CYCLE_DEFAULTS.AVERAGE_CYCLE_LENGTH;
+    const periodLength = cp?.period_length || hp?.average_period_length || CYCLE_DEFAULTS.AVERAGE_PERIOD_LENGTH;
+    const lutealLength = cp?.luteal_phase_length ?? 14;
+
+    const startDate = new Date(lastCycle.rows[0].start_date);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const daysSince    = Math.floor((today - startDate) / 86_400_000);
+    const cyclesPassed = Math.floor(daysSince / cycleLength);
+
+    const addDays = (base, n) => {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().split('T')[0];
+    };
+
+    const cutoff = new Date(today);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() + months);
+
+    const periods = [];
+    const ovulations = [];
+
+    for (let i = cyclesPassed + 1; ; i++) {
+      const periodStart = new Date(startDate);
+      periodStart.setUTCDate(periodStart.getUTCDate() + i * cycleLength);
+      if (periodStart > cutoff) break;
+
+      const fmt = d => (d instanceof Date ? d : new Date(d)).toISOString().split('T')[0];
+      const periodEnd  = new Date(periodStart); periodEnd.setUTCDate(periodEnd.getUTCDate() + periodLength - 1);
+      const ovulation  = new Date(periodStart); ovulation.setUTCDate(ovulation.getUTCDate() - lutealLength);
+      const fertStart  = new Date(ovulation);   fertStart.setUTCDate(fertStart.getUTCDate() - 5);
+      const fertEnd    = new Date(ovulation);   fertEnd.setUTCDate(fertEnd.getUTCDate() + 1);
+
+      periods.push({ start: fmt(periodStart), end: fmt(periodEnd) });
+      ovulations.push({ date: fmt(ovulation), fertile_start: fmt(fertStart), fertile_end: fmt(fertEnd) });
+    }
+
+    return { cycle_length: cycleLength, period_length: periodLength, periods, ovulations };
   }
 
   /**
