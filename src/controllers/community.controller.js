@@ -194,6 +194,15 @@ const communityController = {
     }
   },
 
+  async getUnreadCount(req, res) {
+    try {
+      const count = await communityService.getUnreadCount(req.user.id);
+      return ApiResponse.success(res, { count }, 'Unread count retrieved');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   async markAllRead(req, res) {
     try {
       await communityService.markAllRead(req.user.id);

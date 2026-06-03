@@ -387,11 +387,24 @@ class CommunityService {
       type: n.type,
       message: n.message,
       is_read: n.is_read,
+      read: n.is_read,
       created_at: n.created_at,
+      avatar_url: n.actor_avatar_url ?? null,
       actor: n.actor_id
         ? { id: n.actor_id, name: n.actor_name, avatar_url: n.actor_avatar_url }
-        : null
+        : null,
     }));
+  }
+
+  /**
+   * Count unread notifications for a user.
+   */
+  async getUnreadCount(userId) {
+    const result = await pool.query(
+      'SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND is_read = false',
+      [userId]
+    );
+    return parseInt(result.rows[0].count, 10);
   }
 
   /**
