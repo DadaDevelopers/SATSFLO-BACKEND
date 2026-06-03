@@ -163,7 +163,7 @@ const journalController = {
     }
   },
 
-  // POST /journal/media  — multipart { files } → returns base64 data URLs
+  // POST /journal/media  — multipart { files } → returns Cloudinary URLs
   async uploadMedia(req, res) {
     try {
       if (!req.files || req.files.length === 0) {
@@ -172,10 +172,7 @@ const journalController = {
         ]);
       }
 
-      const urls = req.files.map(file => {
-        const b64 = file.buffer.toString('base64');
-        return `data:${file.mimetype};base64,${b64}`;
-      });
+      const urls = req.files.map(file => file.path);
 
       return ApiResponse.success(res, { urls }, 'Media uploaded');
     } catch (err) {
