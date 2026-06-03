@@ -247,6 +247,35 @@ const getPredictions = async (req, res, next) => {
 };
 
 /**
+ * Get phase date ranges for wheel segments
+ * GET /api/v1/cycles/phases
+ */
+const getPhases = async (req, res, next) => {
+  try {
+    const phases = await cycleService.getPhases(req.user.id);
+    if (!phases) return ApiResponse.success(res, null, 'No cycle data found');
+    return ApiResponse.success(res, phases, 'Cycle phases retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get multi-month period + ovulation forecast
+ * GET /api/v1/cycles/forecast?months=3
+ */
+const getForecast = async (req, res, next) => {
+  try {
+    const months = Math.min(12, Math.max(1, parseInt(req.query.months) || 3));
+    const forecast = await cycleService.getForecast(req.user.id, months);
+    if (!forecast) return ApiResponse.success(res, null, 'No cycle data found');
+    return ApiResponse.success(res, forecast, 'Forecast retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Add log to a specific cycle
  * POST /api/v1/cycles/:cycleId/logs
  */
@@ -277,5 +306,7 @@ module.exports = {
   deleteCycle,
   getDailyLog,
   getAnalytics,
-  getPredictions
+  getPredictions,
+  getPhases,
+  getForecast,
 };

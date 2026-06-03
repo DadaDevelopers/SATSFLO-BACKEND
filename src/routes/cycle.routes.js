@@ -94,6 +94,20 @@ router.get('/current', cycleController.getCurrentCycle);
  */
 router.get('/predictions', cycleController.getPredictions);
 
+/**
+ * @route   GET /api/v1/cycles/phases
+ * @desc    Get phase date ranges for wheel segments
+ * @access  Private
+ */
+router.get('/phases', cycleController.getPhases);
+
+/**
+ * @route   GET /api/v1/cycles/forecast?months=3
+ * @desc    Get upcoming period + ovulation predictions for N months
+ * @access  Private
+ */
+router.get('/forecast', cycleController.getForecast);
+
 // ==================== ANALYTICS ====================
 
 /**
