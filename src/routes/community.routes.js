@@ -29,5 +29,6 @@ router.get('/notifications/unread-count',             authenticateToken, communi
 router.patch('/notifications/read-all',               authenticateToken, communityController.markAllRead);
 router.post('/notifications/read-all',                authenticateToken, communityController.markAllRead);
 router.patch('/notifications/:notificationId/read',   authenticateToken, communityController.markNotificationRead);
+router.delete('/notifications/:notificationId',       authenticateToken, communityController.deleteNotification);
 
 module.exports = router;

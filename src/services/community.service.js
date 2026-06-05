@@ -418,6 +418,19 @@ class CommunityService {
   }
 
   /**
+   * Delete a single notification (must belong to the user).
+   */
+  async deleteNotification(userId, notificationId) {
+    const result = await pool.query(
+      'DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING id',
+      [notificationId, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('Notification not found'); err.statusCode = 404; throw err;
+    }
+  }
+
+  /**
    * Mark a single notification as read (must belong to the user).
    */
   async markNotificationRead(userId, notificationId) {

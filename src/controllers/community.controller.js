@@ -212,6 +212,15 @@ const communityController = {
     }
   },
 
+  async deleteNotification(req, res) {
+    try {
+      await communityService.deleteNotification(req.user.id, req.params.notificationId);
+      return ApiResponse.success(res, null, 'Notification deleted');
+    } catch (err) {
+      return ApiResponse.error(res, err.message, err.statusCode || 500);
+    }
+  },
+
   async markNotificationRead(req, res) {
     try {
       const { notificationId } = req.params;
