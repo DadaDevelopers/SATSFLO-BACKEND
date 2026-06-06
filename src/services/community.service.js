@@ -20,10 +20,7 @@ class CommunityService {
       whereClause = `WHERE t.content ILIKE $${values.length}`;
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM threads t ${whereClause}`,
-      values
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM threads t ${whereClause}`, values);
 
     values.push(limit, offset);
 
@@ -45,15 +42,15 @@ class CommunityService {
 
     let likedSet = new Set();
     if (userId && result.rows.length > 0) {
-      const threadIds = result.rows.map(t => t.id);
+      const threadIds = result.rows.map((t) => t.id);
       const likesResult = await pool.query(
         'SELECT thread_id FROM thread_likes WHERE user_id = $1 AND thread_id = ANY($2)',
         [userId, threadIds]
       );
-      likedSet = new Set(likesResult.rows.map(l => l.thread_id));
+      likedSet = new Set(likesResult.rows.map((l) => l.thread_id));
     }
 
-    let threads = result.rows.map(t => ({
+    let threads = result.rows.map((t) => ({
       id: t.id,
       content: t.content,
       image_url: t.image_url,
@@ -62,7 +59,7 @@ class CommunityService {
       user: { id: t.user_id, name: t.user_name, avatar_url: t.user_avatar_url },
       comment_count: parseInt(t.comment_count),
       like_count: parseInt(t.like_count),
-      is_liked_by_me: likedSet.has(t.id)
+      is_liked_by_me: likedSet.has(t.id),
     }));
 
     if (tab === 'popular') {
@@ -93,10 +90,9 @@ class CommunityService {
     );
     const thread = result.rows[0];
 
-    const userResult = await pool.query(
-      'SELECT id, name, avatar_url FROM users WHERE id = $1',
-      [userId]
-    );
+    const userResult = await pool.query('SELECT id, name, avatar_url FROM users WHERE id = $1', [
+      userId,
+    ]);
 
     return { ...thread, user: userResult.rows[0] };
   }
@@ -122,11 +118,11 @@ class CommunityService {
       [threadId]
     );
 
-    return result.rows.map(c => ({
+    return result.rows.map((c) => ({
       id: c.id,
       content: c.content,
       created_at: c.created_at,
-      user: { id: c.user_id, name: c.user_name, avatar_url: c.user_avatar_url }
+      user: { id: c.user_id, name: c.user_name, avatar_url: c.user_avatar_url },
     }));
   }
 
@@ -134,10 +130,7 @@ class CommunityService {
    * Add a comment to a thread.
    */
   async addComment(userId, threadId, content) {
-    const threadResult = await pool.query(
-      'SELECT id FROM threads WHERE id = $1',
-      [threadId]
-    );
+    const threadResult = await pool.query('SELECT id FROM threads WHERE id = $1', [threadId]);
     if (!threadResult.rows[0]) {
       const err = new Error('Thread not found');
       err.statusCode = 404;
@@ -152,10 +145,9 @@ class CommunityService {
     );
     const comment = result.rows[0];
 
-    const userResult = await pool.query(
-      'SELECT id, name, avatar_url FROM users WHERE id = $1',
-      [userId]
-    );
+    const userResult = await pool.query('SELECT id, name, avatar_url FROM users WHERE id = $1', [
+      userId,
+    ]);
 
     return { ...comment, user: userResult.rows[0] };
   }
@@ -205,7 +197,7 @@ class CommunityService {
       comment_count: parseInt(t.comment_count),
       like_count: parseInt(t.like_count),
       is_liked_by_me,
-      comments
+      comments,
     };
   }
 
@@ -213,10 +205,7 @@ class CommunityService {
    * Update a thread (only by owner).
    */
   async updateThread(userId, threadId, { content, image_url }) {
-    const existing = await pool.query(
-      'SELECT user_id FROM threads WHERE id = $1',
-      [threadId]
-    );
+    const existing = await pool.query('SELECT user_id FROM threads WHERE id = $1', [threadId]);
     if (!existing.rows[0]) {
       const err = new Error('Thread not found');
       err.statusCode = 404;
@@ -230,8 +219,14 @@ class CommunityService {
 
     const fields = [];
     const values = [];
-    if (content !== undefined) { values.push(content); fields.push(`content = $${values.length}`); }
-    if (image_url !== undefined) { values.push(image_url); fields.push(`image_url = $${values.length}`); }
+    if (content !== undefined) {
+      values.push(content);
+      fields.push(`content = $${values.length}`);
+    }
+    if (image_url !== undefined) {
+      values.push(image_url);
+      fields.push(`image_url = $${values.length}`);
+    }
 
     if (fields.length === 0) {
       const err = new Error('No fields to update');
@@ -251,10 +246,7 @@ class CommunityService {
    * Delete a thread (only by owner or admin).
    */
   async deleteThread(userId, threadId, userRole) {
-    const existing = await pool.query(
-      'SELECT user_id FROM threads WHERE id = $1',
-      [threadId]
-    );
+    const existing = await pool.query('SELECT user_id FROM threads WHERE id = $1', [threadId]);
     if (!existing.rows[0]) {
       const err = new Error('Thread not found');
       err.statusCode = 404;
@@ -293,10 +285,9 @@ class CommunityService {
       [content, commentId]
     );
     const comment = result.rows[0];
-    const userResult = await pool.query(
-      'SELECT id, name, avatar_url FROM users WHERE id = $1',
-      [userId]
-    );
+    const userResult = await pool.query('SELECT id, name, avatar_url FROM users WHERE id = $1', [
+      userId,
+    ]);
     return { ...comment, user: userResult.rows[0] };
   }
 
@@ -331,10 +322,10 @@ class CommunityService {
    */
   async likeThread(userId, threadId) {
     try {
-      await pool.query(
-        'INSERT INTO thread_likes (thread_id, user_id) VALUES ($1, $2)',
-        [threadId, userId]
-      );
+      await pool.query('INSERT INTO thread_likes (thread_id, user_id) VALUES ($1, $2)', [
+        threadId,
+        userId,
+      ]);
     } catch (err) {
       if (err.code !== '23505') throw err; // ignore unique violation
     }
@@ -345,18 +336,17 @@ class CommunityService {
    * Remove like from a thread.
    */
   async unlikeThread(userId, threadId) {
-    await pool.query(
-      'DELETE FROM thread_likes WHERE thread_id = $1 AND user_id = $2',
-      [threadId, userId]
-    );
+    await pool.query('DELETE FROM thread_likes WHERE thread_id = $1 AND user_id = $2', [
+      threadId,
+      userId,
+    ]);
     return this._getLikeCount(threadId);
   }
 
   async _getLikeCount(threadId) {
-    const result = await pool.query(
-      'SELECT COUNT(*) FROM thread_likes WHERE thread_id = $1',
-      [threadId]
-    );
+    const result = await pool.query('SELECT COUNT(*) FROM thread_likes WHERE thread_id = $1', [
+      threadId,
+    ]);
     return parseInt(result.rows[0].count);
   }
 
@@ -382,7 +372,7 @@ class CommunityService {
       [userId]
     );
 
-    return result.rows.map(n => ({
+    return result.rows.map((n) => ({
       id: n.id,
       type: n.type,
       message: n.message,
@@ -426,7 +416,9 @@ class CommunityService {
       [notificationId, userId]
     );
     if (!result.rows[0]) {
-      const err = new Error('Notification not found'); err.statusCode = 404; throw err;
+      const err = new Error('Notification not found');
+      err.statusCode = 404;
+      throw err;
     }
   }
 

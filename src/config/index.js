@@ -8,5 +8,5 @@ const { pool, dbConfig } = require('./database');
 module.exports = {
   jwt,
   pool,
-  dbConfig
+  dbConfig,
 };

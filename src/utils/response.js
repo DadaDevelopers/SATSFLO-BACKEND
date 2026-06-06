@@ -18,7 +18,7 @@ class ApiResponse {
       success: true,
       message,
       data,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -41,7 +41,7 @@ class ApiResponse {
       success: false,
       message,
       errors,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -53,7 +53,7 @@ class ApiResponse {
       success: false,
       message: 'Validation failed',
       errors,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -64,7 +64,7 @@ class ApiResponse {
     return res.status(401).json({
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -75,7 +75,7 @@ class ApiResponse {
     return res.status(403).json({
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -86,7 +86,7 @@ class ApiResponse {
     return res.status(404).json({
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -97,7 +97,7 @@ class ApiResponse {
     return res.status(409).json({
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -118,9 +118,9 @@ class ApiResponse {
         total: pagination.total,
         totalPages: Math.ceil(pagination.total / pagination.limit),
         hasNext: pagination.page < Math.ceil(pagination.total / pagination.limit),
-        hasPrev: pagination.page > 1
+        hasPrev: pagination.page > 1,
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 }

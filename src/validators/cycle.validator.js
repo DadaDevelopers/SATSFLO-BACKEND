@@ -41,7 +41,7 @@ const startPeriodValidation = [
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters')
+    .withMessage('Notes must not exceed 500 characters'),
 ];
 
 /**
@@ -61,7 +61,7 @@ const endPeriodValidation = [
         throw new Error('Date cannot be in the future');
       }
       return true;
-    })
+    }),
 ];
 
 /**
@@ -98,10 +98,7 @@ const logDailyEntryValidation = [
     .isIn(['dry', 'sticky', 'creamy', 'watery', 'egg_white'])
     .withMessage('Invalid cervical mucus type'),
 
-  body('sexualActivity')
-    .optional()
-    .isBoolean()
-    .withMessage('Sexual activity must be a boolean'),
+  body('sexualActivity').optional().isBoolean().withMessage('Sexual activity must be a boolean'),
 
   body('contraceptionUsed')
     .optional()
@@ -112,26 +109,18 @@ const logDailyEntryValidation = [
     .optional()
     .trim()
     .isLength({ max: 1000 })
-    .withMessage('Notes must not exceed 1000 characters')
+    .withMessage('Notes must not exceed 1000 characters'),
 ];
 
 /**
  * Update cycle validation
  */
 const updateCycleValidation = [
-  param('cycleId')
-    .isUUID()
-    .withMessage('Invalid cycle ID format'),
+  param('cycleId').isUUID().withMessage('Invalid cycle ID format'),
 
-  body('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Start date must be a valid ISO 8601 date'),
+  body('startDate').optional().isISO8601().withMessage('Start date must be a valid ISO 8601 date'),
 
-  body('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('End date must be a valid ISO 8601 date'),
+  body('endDate').optional().isISO8601().withMessage('End date must be a valid ISO 8601 date'),
 
   body('periodEndDate')
     .optional()
@@ -142,50 +131,35 @@ const updateCycleValidation = [
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters')
+    .withMessage('Notes must not exceed 500 characters'),
 ];
 
 /**
  * Get cycles validation (pagination & filters)
  */
 const getCyclesValidation = [
-  query('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer'),
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
 
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit must be between 1 and 100'),
 
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Start date must be a valid ISO 8601 date'),
+  query('startDate').optional().isISO8601().withMessage('Start date must be a valid ISO 8601 date'),
 
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('End date must be a valid ISO 8601 date')
+  query('endDate').optional().isISO8601().withMessage('End date must be a valid ISO 8601 date'),
 ];
 
 /**
  * Cycle ID parameter validation
  */
-const cycleIdParamValidation = [
-  param('cycleId')
-    .isUUID()
-    .withMessage('Invalid cycle ID format')
-];
+const cycleIdParamValidation = [param('cycleId').isUUID().withMessage('Invalid cycle ID format')];
 
 /**
  * Date parameter validation
  */
 const dateParamValidation = [
-  param('date')
-    .isISO8601()
-    .withMessage('Date must be a valid ISO 8601 date')
+  param('date').isISO8601().withMessage('Date must be a valid ISO 8601 date'),
 ];
 
 /**
@@ -196,9 +170,7 @@ const importCyclesValidation = [
     .isArray({ min: 1, max: 100 })
     .withMessage('Cycles must be an array with 1-100 entries'),
 
-  body('cycles.*.startDate')
-    .isISO8601()
-    .withMessage('Each cycle must have a valid start date'),
+  body('cycles.*.startDate').isISO8601().withMessage('Each cycle must have a valid start date'),
 
   body('cycles.*.endDate')
     .optional()
@@ -208,7 +180,7 @@ const importCyclesValidation = [
   body('cycles.*.periodEndDate')
     .optional()
     .isISO8601()
-    .withMessage('Period end date must be a valid ISO 8601 date')
+    .withMessage('Period end date must be a valid ISO 8601 date'),
 ];
 
 module.exports = {
@@ -219,5 +191,5 @@ module.exports = {
   getCyclesValidation,
   cycleIdParamValidation,
   dateParamValidation,
-  importCyclesValidation
+  importCyclesValidation,
 };

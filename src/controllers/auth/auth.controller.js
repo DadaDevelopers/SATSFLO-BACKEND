@@ -16,13 +16,13 @@ const register = async (req, res, next) => {
 
     if (!name || !email || !password || !confirm_password) {
       return ApiResponse.validationError(res, [
-        { field: 'required', message: 'name, email, password, and confirm_password are required' }
+        { field: 'required', message: 'name, email, password, and confirm_password are required' },
       ]);
     }
 
     if (password !== confirm_password) {
       return ApiResponse.validationError(res, [
-        { field: 'confirm_password', message: 'Passwords do not match' }
+        { field: 'confirm_password', message: 'Passwords do not match' },
       ]);
     }
 
@@ -121,13 +121,17 @@ const verifyOtp = async (req, res, next) => {
     const { email, otp } = req.body;
     if (!email || !otp) {
       return ApiResponse.validationError(res, [
-        { field: 'required', message: 'email and otp are required' }
+        { field: 'required', message: 'email and otp are required' },
       ]);
     }
 
     const result = await authService.verifyOtp(email, String(otp));
 
-    return ApiResponse.success(res, result, 'OTP verified. Use the reset_token to set your new password.');
+    return ApiResponse.success(
+      res,
+      result,
+      'OTP verified. Use the reset_token to set your new password.'
+    );
   } catch (error) {
     next(error);
   }
@@ -144,13 +148,13 @@ const resetPassword = async (req, res, next) => {
 
     if (!token || !password || !confirm_password) {
       return ApiResponse.validationError(res, [
-        { field: 'required', message: 'token, password, and confirm_password are required' }
+        { field: 'required', message: 'token, password, and confirm_password are required' },
       ]);
     }
 
     if (password !== confirm_password) {
       return ApiResponse.validationError(res, [
-        { field: 'confirm_password', message: 'Passwords do not match' }
+        { field: 'confirm_password', message: 'Passwords do not match' },
       ]);
     }
 
@@ -228,9 +232,10 @@ const verifyEmail = async (req, res) => {
     await authService.verifyEmail(token);
     return res.setHeader('Content-Type', 'text/html').send(successPage);
   } catch (error) {
-    const message = error.code === 'EXPIRED_TOKEN'
-      ? 'This verification link has expired. Links are valid for 24 hours.'
-      : 'This verification link is invalid or has already been used.';
+    const message =
+      error.code === 'EXPIRED_TOKEN'
+        ? 'This verification link has expired. Links are valid for 24 hours.'
+        : 'This verification link is invalid or has already been used.';
     return res.status(400).setHeader('Content-Type', 'text/html').send(errorPage(message, true));
   }
 };
@@ -262,7 +267,7 @@ const getCurrentUser = async (req, res, next) => {
       role: profile.role,
       avatar: profile.avatar_url,
       avatar_url: profile.avatar_url,
-      emailVerified: profile.email_verified
+      emailVerified: profile.email_verified,
     });
   } catch (error) {
     next(error);
@@ -280,5 +285,5 @@ module.exports = {
   resetPassword,
   verifyEmail,
   resendVerification,
-  getCurrentUser
+  getCurrentUser,
 };

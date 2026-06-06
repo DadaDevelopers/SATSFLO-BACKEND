@@ -15,10 +15,10 @@ const validate = (req, res, next) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    const formattedErrors = errors.array().map(err => ({
+    const formattedErrors = errors.array().map((err) => ({
       field: err.path,
       message: err.msg,
-      value: err.value !== undefined ? err.value : undefined
+      value: err.value !== undefined ? err.value : undefined,
     }));
 
     return ApiResponse.validationError(res, formattedErrors);
@@ -32,7 +32,7 @@ const validate = (req, res, next) => {
  */
 const sanitizeBody = (req, res, next) => {
   if (req.body && typeof req.body === 'object') {
-    Object.keys(req.body).forEach(key => {
+    Object.keys(req.body).forEach((key) => {
       if (req.body[key] === undefined || req.body[key] === null) {
         delete req.body[key];
       }
@@ -47,5 +47,5 @@ const sanitizeBody = (req, res, next) => {
 
 module.exports = {
   validate,
-  sanitizeBody
+  sanitizeBody,
 };

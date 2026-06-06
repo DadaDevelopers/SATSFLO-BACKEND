@@ -28,8 +28,12 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     if (skipInTest()) return true;
-    return req.path === '/health' || req.path === API_HEALTH_PATH || req.originalUrl === API_HEALTH_ORIGINAL_PATH;
-  }
+    return (
+      req.path === '/health' ||
+      req.path === API_HEALTH_PATH ||
+      req.originalUrl === API_HEALTH_ORIGINAL_PATH
+    );
+  },
 });
 
 /**
@@ -48,7 +52,7 @@ const authLimiter = rateLimit({
       'Too many authentication attempts. Please try again in 15 minutes.',
       429
     );
-  }
+  },
 });
 
 /**
@@ -61,12 +65,8 @@ const passwordResetLimiter = rateLimit({
   skip: skipInTest,
   message: 'Too many password reset attempts',
   handler: (req, res) => {
-    ApiResponse.error(
-      res,
-      'Too many password reset attempts. Please try again in an hour.',
-      429
-    );
-  }
+    ApiResponse.error(res, 'Too many password reset attempts. Please try again in an hour.', 429);
+  },
 });
 
 /**
@@ -80,7 +80,7 @@ const sensitiveDataLimiter = rateLimit({
   message: 'Too many requests for sensitive data',
   handler: (req, res) => {
     ApiResponse.error(res, 'Please slow down your requests.', 429);
-  }
+  },
 });
 
 /**
@@ -93,12 +93,8 @@ const registrationLimiter = rateLimit({
   skip: skipInTest,
   message: 'Too many accounts created',
   handler: (req, res) => {
-    ApiResponse.error(
-      res,
-      'Too many accounts created from this IP. Please try again later.',
-      429
-    );
-  }
+    ApiResponse.error(res, 'Too many accounts created from this IP. Please try again later.', 429);
+  },
 });
 
 /**
@@ -116,7 +112,7 @@ const resendVerificationLimiter = rateLimit({
       'Too many verification email requests. Please try again in an hour.',
       429
     );
-  }
+  },
 });
 
 module.exports = {
@@ -125,5 +121,5 @@ module.exports = {
   passwordResetLimiter,
   sensitiveDataLimiter,
   registrationLimiter,
-  resendVerificationLimiter
+  resendVerificationLimiter,
 };

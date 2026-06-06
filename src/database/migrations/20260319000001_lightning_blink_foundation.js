@@ -50,9 +50,15 @@ exports.up = async (pgm) => {
     )
   `);
 
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_user ON lightning_transactions (user_id, created_at DESC)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_status ON lightning_transactions (status)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_request ON lightning_transactions (payment_request)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_user ON lightning_transactions (user_id, created_at DESC)`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_status ON lightning_transactions (status)`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_request ON lightning_transactions (payment_request)`
+  );
 
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS reward_ledger (
@@ -70,7 +76,9 @@ exports.up = async (pgm) => {
     )
   `);
 
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_reward_ledger_user ON reward_ledger (user_id, created_at DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_reward_ledger_user ON reward_ledger (user_id, created_at DESC)`
+  );
 };
 
 exports.down = async (pgm) => {

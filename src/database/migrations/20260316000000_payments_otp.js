@@ -2,41 +2,49 @@
 
 exports.up = async (pgm) => {
   // Add OTP columns to users
-  pgm.addColumns('users', {
-    email_otp: {
-      type: 'VARCHAR(6)',
-      notNull: false,
+  pgm.addColumns(
+    'users',
+    {
+      email_otp: {
+        type: 'VARCHAR(6)',
+        notNull: false,
+      },
+      email_otp_expires: {
+        type: 'TIMESTAMPTZ',
+        notNull: false,
+      },
+      lightning_address: {
+        type: 'VARCHAR(255)',
+        notNull: false,
+      },
     },
-    email_otp_expires: {
-      type: 'TIMESTAMPTZ',
-      notNull: false,
-    },
-    lightning_address: {
-      type: 'VARCHAR(255)',
-      notNull: false,
-    },
-  }, { ifNotExists: true });
+    { ifNotExists: true }
+  );
 
   // Add payment columns to gift_transactions
-  pgm.addColumns('gift_transactions', {
-    bolt11_invoice: {
-      type: 'TEXT',
-      notNull: false,
+  pgm.addColumns(
+    'gift_transactions',
+    {
+      bolt11_invoice: {
+        type: 'TEXT',
+        notNull: false,
+      },
+      payment_hash: {
+        type: 'VARCHAR(255)',
+        notNull: false,
+        unique: true,
+      },
+      note: {
+        type: 'TEXT',
+        notNull: false,
+      },
+      expires_at: {
+        type: 'TIMESTAMPTZ',
+        notNull: false,
+      },
     },
-    payment_hash: {
-      type: 'VARCHAR(255)',
-      notNull: false,
-      unique: true,
-    },
-    note: {
-      type: 'TEXT',
-      notNull: false,
-    },
-    expires_at: {
-      type: 'TIMESTAMPTZ',
-      notNull: false,
-    },
-  }, { ifNotExists: true });
+    { ifNotExists: true }
+  );
 
   // Index on gift_transactions(payment_hash)
   pgm.createIndex('gift_transactions', 'payment_hash', {

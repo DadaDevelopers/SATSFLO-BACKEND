@@ -4,11 +4,10 @@ const groupService = require('../services/group.service');
 const ApiResponse = require('../utils/response');
 
 const groupController = {
-
   async getGroups(req, res) {
     try {
       const result = await groupService.getGroups(req.user.id);
-      const mapped = result.map(g => ({
+      const mapped = result.map((g) => ({
         ...g,
         members_count: g.member_count ?? 0,
         last_message: g.last_message ?? null,
@@ -60,7 +59,9 @@ const groupController = {
     try {
       const { user_id } = req.body;
       if (!user_id) {
-        return ApiResponse.validationError(res, [{ field: 'user_id', message: 'user_id is required' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'user_id', message: 'user_id is required' },
+        ]);
       }
       await groupService.addMember(req.user.id, req.params.groupId, user_id);
       return ApiResponse.success(res, null, 'Member added');
@@ -95,9 +96,15 @@ const groupController = {
     try {
       const { content } = req.body;
       if (!content?.trim()) {
-        return ApiResponse.validationError(res, [{ field: 'content', message: 'content is required' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'content', message: 'content is required' },
+        ]);
       }
-      const result = await groupService.sendMessage(req.user.id, req.params.groupId, content.trim());
+      const result = await groupService.sendMessage(
+        req.user.id,
+        req.params.groupId,
+        content.trim()
+      );
       return ApiResponse.created(res, result, 'Message sent');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);

@@ -15,9 +15,27 @@ async function seedUsers() {
   console.log('Seeding users...');
 
   const users = [
-    { email: 'admin@satsflow.com', password: 'Admin123!', name: 'Admin User', role: 'admin', email_verified: true },
-    { email: 'test@satsflow.com',  password: 'Test123!',  name: 'Test User',  role: 'user',  email_verified: true },
-    { email: 'demo@satsflow.com',  password: 'Demo123!',  name: 'Demo User',  role: 'user',  email_verified: true }
+    {
+      email: 'admin@satsflow.com',
+      password: 'Admin123!',
+      name: 'Admin User',
+      role: 'admin',
+      email_verified: true,
+    },
+    {
+      email: 'test@satsflow.com',
+      password: 'Test123!',
+      name: 'Test User',
+      role: 'user',
+      email_verified: true,
+    },
+    {
+      email: 'demo@satsflow.com',
+      password: 'Demo123!',
+      name: 'Demo User',
+      role: 'user',
+      email_verified: true,
+    },
   ];
 
   const createdUsers = [];
@@ -58,8 +76,8 @@ async function seedHealthProfiles(users) {
          ON CONFLICT (user_id) DO NOTHING`,
         [
           user.id,
-          Math.floor(Math.random() * 7) + 26,  // 26-32
-          Math.floor(Math.random() * 3) + 4     // 4-6
+          Math.floor(Math.random() * 7) + 26, // 26-32
+          Math.floor(Math.random() * 3) + 4, // 4-6
         ]
       );
       console.log(`  Created health profile for: ${user.email}`);
@@ -72,7 +90,7 @@ async function seedHealthProfiles(users) {
 async function seedCycles(users) {
   console.log('Seeding cycles...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
   const today = new Date();
@@ -91,7 +109,7 @@ async function seedCycles(users) {
       user_id: testUser.id,
       start_date: startDate.toISOString().split('T')[0],
       period_end_date: periodEndDate.toISOString().split('T')[0],
-      period_length: periodLength
+      period_length: periodLength,
     });
   }
 
@@ -125,15 +143,15 @@ async function seedCycles(users) {
 async function seedSymptoms(users) {
   console.log('Seeding symptoms...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
   const symptoms = [
-    { symptom: 'cramps',   category: 'pain',     severity: 2 },
-    { symptom: 'headache', category: 'pain',     severity: 1 },
+    { symptom: 'cramps', category: 'pain', severity: 2 },
+    { symptom: 'headache', category: 'pain', severity: 1 },
     { symptom: 'bloating', category: 'physical', severity: 2 },
-    { symptom: 'fatigue',  category: 'physical', severity: 2 },
-    { symptom: 'acne',     category: 'skin',     severity: 1 }
+    { symptom: 'fatigue', category: 'physical', severity: 2 },
+    { symptom: 'acne', category: 'skin', severity: 1 },
   ];
 
   const today = new Date();
@@ -168,7 +186,7 @@ async function seedSymptoms(users) {
 async function seedMoods(users) {
   console.log('Seeding moods...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
   const moods = ['happy', 'calm', 'energetic', 'tired', 'irritable', 'anxious'];
@@ -202,13 +220,17 @@ async function seedMoods(users) {
 async function seedForums(users) {
   console.log('Seeding forums...');
 
-  const adminUser = users.find(u => u.role === 'admin');
+  const adminUser = users.find((u) => u.role === 'admin');
 
   const forums = [
-    { name: 'General Discussion', slug: 'general',    description: 'General chat and discussions' },
-    { name: 'Health Tips',        slug: 'health-tips', description: 'Share and discover health tips' },
-    { name: 'Support Circle',     slug: 'support',     description: 'Support and encouragement' },
-    { name: 'Bitcoin & Rewards',  slug: 'bitcoin',     description: 'Discuss Bitcoin rewards and Lightning' }
+    { name: 'General Discussion', slug: 'general', description: 'General chat and discussions' },
+    { name: 'Health Tips', slug: 'health-tips', description: 'Share and discover health tips' },
+    { name: 'Support Circle', slug: 'support', description: 'Support and encouragement' },
+    {
+      name: 'Bitcoin & Rewards',
+      slug: 'bitcoin',
+      description: 'Discuss Bitcoin rewards and Lightning',
+    },
   ];
 
   for (const forum of forums) {

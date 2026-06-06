@@ -9,10 +9,10 @@ class DayLogsService {
    * Get a single day log. Returns null if not found.
    */
   async getByDate(userId, date) {
-    const result = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE user_id = $1 AND log_date = $2`,
-      [userId, date]
-    );
+    const result = await pool.query(`SELECT * FROM ${TABLE} WHERE user_id = $1 AND log_date = $2`, [
+      userId,
+      date,
+    ]);
     return result.rows[0] || null;
   }
 
@@ -26,8 +26,8 @@ class DayLogsService {
     const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
     const cols = keys.join(', ');
     const updates = keys
-      .filter(k => k !== 'user_id' && k !== 'log_date')
-      .map(k => `${k} = EXCLUDED.${k}`)
+      .filter((k) => k !== 'user_id' && k !== 'log_date')
+      .map((k) => `${k} = EXCLUDED.${k}`)
       .join(', ');
 
     const result = await pool.query(

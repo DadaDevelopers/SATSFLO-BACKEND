@@ -27,7 +27,9 @@ const registerValidation = [
 
   body('password')
     .isLength({ min: PASSWORD_REQUIREMENTS.MIN_LENGTH, max: PASSWORD_REQUIREMENTS.MAX_LENGTH })
-    .withMessage(`Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`)
+    .withMessage(
+      `Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`
+    )
     .matches(/[a-z]/)
     .withMessage('Password must contain at least one lowercase letter')
     .matches(/[A-Z]/)
@@ -43,21 +45,16 @@ const registerValidation = [
         throw new Error('Passwords do not match');
       }
       return true;
-    })
+    }),
 ];
 
 /**
  * Login validation
  */
 const loginValidation = [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+  body('email').isEmail().withMessage('Please provide a valid email address').normalizeEmail(),
 
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required')
+  body('password').notEmpty().withMessage('Password is required'),
 ];
 
 /**
@@ -68,30 +65,27 @@ const refreshTokenValidation = [
     .notEmpty()
     .withMessage('Refresh token is required')
     .isLength({ min: 20 })
-    .withMessage('Invalid refresh token format')
+    .withMessage('Invalid refresh token format'),
 ];
 
 /**
  * Forgot password validation
  */
 const forgotPasswordValidation = [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail()
+  body('email').isEmail().withMessage('Please provide a valid email address').normalizeEmail(),
 ];
 
 /**
  * Reset password validation (/:token path param)
  */
 const resetPasswordValidation = [
-  param('token')
-    .notEmpty()
-    .withMessage('Reset token is required'),
+  param('token').notEmpty().withMessage('Reset token is required'),
 
   body('password')
     .isLength({ min: PASSWORD_REQUIREMENTS.MIN_LENGTH, max: PASSWORD_REQUIREMENTS.MAX_LENGTH })
-    .withMessage(`Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`)
+    .withMessage(
+      `Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`
+    )
     .matches(/[a-z]/)
     .withMessage('Password must contain at least one lowercase letter')
     .matches(/[A-Z]/)
@@ -107,20 +101,20 @@ const resetPasswordValidation = [
         throw new Error('Passwords do not match');
       }
       return true;
-    })
+    }),
 ];
 
 /**
  * Change password validation
  */
 const changePasswordValidation = [
-  body('currentPassword')
-    .notEmpty()
-    .withMessage('Current password is required'),
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
 
   body('newPassword')
     .isLength({ min: PASSWORD_REQUIREMENTS.MIN_LENGTH, max: PASSWORD_REQUIREMENTS.MAX_LENGTH })
-    .withMessage(`Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`)
+    .withMessage(
+      `Password must be between ${PASSWORD_REQUIREMENTS.MIN_LENGTH} and ${PASSWORD_REQUIREMENTS.MAX_LENGTH} characters`
+    )
     .matches(/[a-z]/)
     .withMessage('Password must contain at least one lowercase letter')
     .matches(/[A-Z]/)
@@ -132,16 +126,14 @@ const changePasswordValidation = [
         throw new Error('New password must be different from current password');
       }
       return true;
-    })
+    }),
 ];
 
 /**
  * Verify email validation (link-based, path param)
  */
 const verifyEmailValidation = [
-  param('token')
-    .notEmpty()
-    .withMessage('Verification token is required')
+  param('token').notEmpty().withMessage('Verification token is required'),
 ];
 
 module.exports = {
@@ -151,5 +143,5 @@ module.exports = {
   forgotPasswordValidation,
   resetPasswordValidation,
   changePasswordValidation,
-  verifyEmailValidation
+  verifyEmailValidation,
 };

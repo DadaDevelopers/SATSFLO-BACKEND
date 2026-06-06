@@ -12,7 +12,6 @@
  */
 
 exports.up = (pgm) => {
-
   // ── DMs ─────────────────────────────────────────────────────────────────────
 
   pgm.sql(`
@@ -41,7 +40,9 @@ exports.up = (pgm) => {
     )
   `);
 
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_dm_conversation ON direct_messages (conversation_id, created_at DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_dm_conversation ON direct_messages (conversation_id, created_at DESC)`
+  );
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_dm_sender       ON direct_messages (sender_id)`);
 
   pgm.sql(`
@@ -93,7 +94,9 @@ exports.up = (pgm) => {
     )
   `);
 
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages (group_id, created_at DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages (group_id, created_at DESC)`
+  );
 };
 
 exports.down = (pgm) => {

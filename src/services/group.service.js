@@ -7,7 +7,6 @@ function err(msg, code = 400) {
 }
 
 class GroupService {
-
   // ── List groups for a user ──────────────────────────────────────────────────
 
   async getGroups(userId) {
@@ -22,7 +21,7 @@ class GroupService {
        ORDER BY g.created_at DESC`,
       [userId]
     );
-    return result.rows.map(g => ({
+    return result.rows.map((g) => ({
       ...g,
       member_count: parseInt(g.member_count),
       message_count: parseInt(g.message_count),
@@ -81,7 +80,10 @@ class GroupService {
     await this._assertMember(userId, groupId);
 
     const [groupResult, membersResult] = await Promise.all([
-      pool.query(`SELECT id, name, description, created_by, created_at, updated_at FROM groups WHERE id = $1`, [groupId]),
+      pool.query(
+        `SELECT id, name, description, created_by, created_at, updated_at FROM groups WHERE id = $1`,
+        [groupId]
+      ),
       pool.query(
         `SELECT u.id, u.name, u.avatar_url, gm.role, gm.joined_at
          FROM group_members gm
@@ -105,8 +107,14 @@ class GroupService {
     const fields = [];
     const values = [groupId];
 
-    if (name !== undefined) { values.push(name.trim()); fields.push(`name = $${values.length}`); }
-    if (description !== undefined) { values.push(description); fields.push(`description = $${values.length}`); }
+    if (name !== undefined) {
+      values.push(name.trim());
+      fields.push(`name = $${values.length}`);
+    }
+    if (description !== undefined) {
+      values.push(description);
+      fields.push(`description = $${values.length}`);
+    }
 
     if (fields.length === 0) throw err('No fields to update');
 
@@ -148,10 +156,10 @@ class GroupService {
 
     if (userId === targetUserId) throw err('Use POST /leave to leave the group', 400);
 
-    await pool.query(
-      'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2',
-      [groupId, targetUserId]
-    );
+    await pool.query('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [
+      groupId,
+      targetUserId,
+    ]);
   }
 
   // ── Leave group ─────────────────────────────────────────────────────────────
@@ -164,15 +172,15 @@ class GroupService {
       `SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'admin'`,
       [groupId]
     );
-    const admins = adminResult.rows.map(r => r.user_id);
+    const admins = adminResult.rows.map((r) => r.user_id);
     if (admins.length === 1 && admins[0] === userId) {
       throw err('Assign another admin before leaving the group', 400);
     }
 
-    await pool.query(
-      'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2',
-      [groupId, userId]
-    );
+    await pool.query('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [
+      groupId,
+      userId,
+    ]);
   }
 
   // ── Get group messages ──────────────────────────────────────────────────────
@@ -194,7 +202,7 @@ class GroupService {
       [groupId, limit, offset]
     );
 
-    return result.rows.map(m => ({
+    return result.rows.map((m) => ({
       id: m.id,
       content: m.content,
       sender_id: m.sender_id,
@@ -235,10 +243,7 @@ class GroupService {
       if (!adminCheck.rows[0]) throw err('Not authorised to delete this message', 403);
     }
 
-    await pool.query(
-      `UPDATE group_messages SET deleted_at = NOW() WHERE id = $1`,
-      [messageId]
-    );
+    await pool.query(`UPDATE group_messages SET deleted_at = NOW() WHERE id = $1`, [messageId]);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -258,7 +263,8 @@ class GroupService {
       [groupId, userId]
     );
     if (!result.rows[0]) throw err('Group not found or access denied', 404);
-    if (result.rows[0].role !== 'admin') throw err('Only group admins can perform this action', 403);
+    if (result.rows[0].role !== 'admin')
+      throw err('Only group admins can perform this action', 403);
   }
 }
 

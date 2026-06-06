@@ -12,7 +12,6 @@ function orderedPair(idA, idB) {
 }
 
 class ChatService {
-
   // ── List conversations ──────────────────────────────────────────────────────
 
   async getConversations(userId) {
@@ -29,15 +28,15 @@ class ChatService {
 
     if (result.rows.length === 0) return [];
 
-    const convIds = result.rows.map(r => r.conversation_id);
-    const otherIds = result.rows.map(r => r.other_user_id);
+    const convIds = result.rows.map((r) => r.conversation_id);
+    const otherIds = result.rows.map((r) => r.other_user_id);
 
     // Fetch other users in one query
     const usersResult = await pool.query(
       `SELECT id, name, avatar_url FROM users WHERE id = ANY($1)`,
       [otherIds]
     );
-    const usersMap = Object.fromEntries(usersResult.rows.map(u => [u.id, u]));
+    const usersMap = Object.fromEntries(usersResult.rows.map((u) => [u.id, u]));
 
     // Last message per conversation
     const lastMsgResult = await pool.query(
@@ -48,7 +47,7 @@ class ChatService {
        ORDER BY conversation_id, created_at DESC`,
       [convIds]
     );
-    const lastMsgMap = Object.fromEntries(lastMsgResult.rows.map(m => [m.conversation_id, m]));
+    const lastMsgMap = Object.fromEntries(lastMsgResult.rows.map((m) => [m.conversation_id, m]));
 
     // Unread counts
     const unreadResult = await pool.query(
@@ -61,7 +60,9 @@ class ChatService {
        GROUP BY conversation_id`,
       [convIds, userId]
     );
-    const unreadMap = Object.fromEntries(unreadResult.rows.map(r => [r.conversation_id, parseInt(r.unread_count)]));
+    const unreadMap = Object.fromEntries(
+      unreadResult.rows.map((r) => [r.conversation_id, parseInt(r.unread_count)])
+    );
 
     // Typing indicators (fresh within 5 seconds)
     const typingResult = await pool.query(
@@ -73,9 +74,9 @@ class ChatService {
          AND updated_at > NOW() - INTERVAL '5 seconds'`,
       [convIds, userId]
     );
-    const typingSet = new Set(typingResult.rows.map(t => t.conversation_id));
+    const typingSet = new Set(typingResult.rows.map((t) => t.conversation_id));
 
-    return result.rows.map(r => ({
+    return result.rows.map((r) => ({
       conversation_id: r.conversation_id,
       other_user: usersMap[r.other_user_id] || null,
       last_message: lastMsgMap[r.conversation_id]?.content || null,
@@ -134,7 +135,7 @@ class ChatService {
       [conversationId, limit, offset]
     );
 
-    return result.rows.map(m => ({
+    return result.rows.map((m) => ({
       id: m.id,
       content: m.content,
       sender_id: m.sender_id,
@@ -168,12 +169,10 @@ class ChatService {
       [messageId, conversationId]
     );
     if (!result.rows[0]) throw err('Message not found', 404);
-    if (result.rows[0].sender_id !== userId) throw err('Not authorised to delete this message', 403);
+    if (result.rows[0].sender_id !== userId)
+      throw err('Not authorised to delete this message', 403);
 
-    await pool.query(
-      `UPDATE direct_messages SET deleted_at = NOW() WHERE id = $1`,
-      [messageId]
-    );
+    await pool.query(`UPDATE direct_messages SET deleted_at = NOW() WHERE id = $1`, [messageId]);
   }
 
   // ── Mark conversation as read ───────────────────────────────────────────────

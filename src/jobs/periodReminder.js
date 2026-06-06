@@ -64,9 +64,10 @@ async function runPeriodReminders() {
       const lutealPhaseLength = Number(user.luteal_phase_length) || 14;
       const daysUntilPeriod = Number(user.days_until_period);
       const ovulationDay = cycleLength - lutealPhaseLength;
-      const daysUntilOvulation = ovulationDay >= currentDay
-        ? ovulationDay - currentDay
-        : cycleLength - currentDay + ovulationDay;
+      const daysUntilOvulation =
+        ovulationDay >= currentDay
+          ? ovulationDay - currentDay
+          : cycleLength - currentDay + ovulationDay;
 
       const notifications = [];
 
@@ -74,7 +75,7 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Period reminder',
           body: MESSAGES[daysUntilPeriod],
-          data: { type: 'period_reminder', days_until_period: String(daysUntilPeriod) }
+          data: { type: 'period_reminder', days_until_period: String(daysUntilPeriod) },
         });
       }
 
@@ -82,7 +83,7 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Period starts today',
           body: 'Your period starts today. Be ready and take care of yourself.',
-          data: { type: 'period_starts', days_until_period: '0' }
+          data: { type: 'period_starts', days_until_period: '0' },
         });
       }
 
@@ -90,7 +91,11 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Period ending soon',
           body: 'Today is the expected last day of your period. Remember to log the end when it finishes.',
-          data: { type: 'period_ends', current_day: String(currentDay), period_length: String(periodLength) }
+          data: {
+            type: 'period_ends',
+            current_day: String(currentDay),
+            period_length: String(periodLength),
+          },
         });
       }
 
@@ -98,7 +103,7 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Fertility window starting',
           body: 'Your fertile window begins in 5 days. Stay aware and plan accordingly.',
-          data: { type: 'fertility_reminder', days_until_ovulation: String(daysUntilOvulation) }
+          data: { type: 'fertility_reminder', days_until_ovulation: String(daysUntilOvulation) },
         });
       }
 
@@ -106,7 +111,7 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Ovulation starts today',
           body: 'Your ovulation starts today. Track symptoms or fertility activity as needed.',
-          data: { type: 'ovulation_reminder', days_until_ovulation: '0' }
+          data: { type: 'ovulation_reminder', days_until_ovulation: '0' },
         });
       }
 
@@ -114,7 +119,7 @@ async function runPeriodReminders() {
         notifications.push({
           title: 'Medicine reminder',
           body: 'Don’t forget to take your pills today.',
-          data: { type: 'medicine_reminder' }
+          data: { type: 'medicine_reminder' },
         });
       }
 
@@ -137,8 +142,10 @@ async function runPeriodReminders() {
             days_until_ovulation: notification.data.days_until_ovulation,
           });
         } catch (err) {
-          if (err.code === 'messaging/registration-token-not-registered' ||
-              err.code === 'messaging/invalid-registration-token') {
+          if (
+            err.code === 'messaging/registration-token-not-registered' ||
+            err.code === 'messaging/invalid-registration-token'
+          ) {
             await pool.query(
               'UPDATE users SET fcm_token = NULL, fcm_platform = NULL WHERE id = $1',
               [user.id]

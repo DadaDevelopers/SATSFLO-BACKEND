@@ -7,21 +7,21 @@
 const express = require('express');
 const router = express.Router();
 
-const authRoutes         = require('./auth.routes');
-const userRoutes         = require('./user.routes');
-const cycleRoutes        = require('./cycle.routes');
-const healthRoutes       = require('./health.routes');
+const authRoutes = require('./auth.routes');
+const userRoutes = require('./user.routes');
+const cycleRoutes = require('./cycle.routes');
+const healthRoutes = require('./health.routes');
 const cycleProfileRoutes = require('./cycleProfile.routes');
-const dayLogsRoutes      = require('./dayLogs.routes');
+const dayLogsRoutes = require('./dayLogs.routes');
 const waterSettingsRoutes = require('./waterSettings.routes');
-const journalRoutes      = require('./journal.routes');
-const communityRoutes    = require('./community.routes');
-const paymentRoutes      = require('./payment.routes');
-const lightningRoutes    = require('./lightning.routes');
-const walletRoutes       = require('./wallet.routes');
-const partnerRoutes      = require('./partner.routes');
-const chatRoutes         = require('./chat.routes');
-const groupRoutes        = require('./group.routes');
+const journalRoutes = require('./journal.routes');
+const communityRoutes = require('./community.routes');
+const paymentRoutes = require('./payment.routes');
+const lightningRoutes = require('./lightning.routes');
+const walletRoutes = require('./wallet.routes');
+const partnerRoutes = require('./partner.routes');
+const chatRoutes = require('./chat.routes');
+const groupRoutes = require('./group.routes');
 const ApiResponse = require('../utils/response');
 
 const API_VERSION = process.env.API_VERSION || 'v1';
@@ -36,7 +36,7 @@ router.get('/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || '1.0.0',
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
   });
 });
 
@@ -68,25 +68,25 @@ router.get('/', (req, res) => {
       groups: `${API_BASE_PATH}/groups`,
       threads: `${API_BASE_PATH}/threads`,
       notifications: `${API_BASE_PATH}/notifications`,
-    }
+    },
   });
 });
 
 // Mount route modules
-router.use('/auth',           authRoutes);
-router.use('/users',          userRoutes);
-router.use('/cycles',         cycleRoutes);
-router.use('/health',         healthRoutes);
-router.use('/cycle-profile',  cycleProfileRoutes);
-router.use('/logs',           dayLogsRoutes);
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/cycles', cycleRoutes);
+router.use('/health', healthRoutes);
+router.use('/cycle-profile', cycleProfileRoutes);
+router.use('/logs', dayLogsRoutes);
 router.use('/water-settings', waterSettingsRoutes);
-router.use('/journal',        journalRoutes);
-router.use('/payments',       paymentRoutes);
-router.use('/lightning',      lightningRoutes);
-router.use('/wallet',         walletRoutes);
-router.use('/partner',        partnerRoutes);
-router.use('/chats',          chatRoutes);
-router.use('/groups',         groupRoutes);
-router.use('/',               communityRoutes);   // /threads, /notifications
+router.use('/journal', journalRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/lightning', lightningRoutes);
+router.use('/wallet', walletRoutes);
+router.use('/partner', partnerRoutes);
+router.use('/chats', chatRoutes);
+router.use('/groups', groupRoutes);
+router.use('/', communityRoutes); // /threads, /notifications
 
 module.exports = router;

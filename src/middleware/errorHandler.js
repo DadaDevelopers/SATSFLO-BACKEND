@@ -15,7 +15,7 @@ const errorHandler = (err, req, res, next) => {
     path: req.path,
     method: req.method,
     body: req.body,
-    user: req.user?.id
+    user: req.user?.id,
   });
 
   // Supabase/PostgreSQL errors
@@ -58,9 +58,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Default to 500 for unhandled errors
-  const message = process.env.NODE_ENV === 'production'
-    ? 'Internal server error'
-    : err.message;
+  const message = process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
 
   return ApiResponse.error(res, message, 500);
 };
@@ -74,5 +72,5 @@ const notFoundHandler = (req, res) => {
 
 module.exports = {
   errorHandler,
-  notFoundHandler
+  notFoundHandler,
 };

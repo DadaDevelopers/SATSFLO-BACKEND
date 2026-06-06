@@ -4,7 +4,6 @@ const paymentService = require('../services/payment.service');
 const ApiResponse = require('../utils/response');
 
 const paymentController = {
-
   /**
    * POST /payments/validate
    * Validate a lightning address or LNURL before amount entry.
@@ -66,7 +65,10 @@ const paymentController = {
   async getHistory(req, res) {
     try {
       const { type = 'sent' } = req.query;
-      const history = await paymentService.getHistory(req.user.id, type === 'received' ? 'received' : 'sent');
+      const history = await paymentService.getHistory(
+        req.user.id,
+        type === 'received' ? 'received' : 'sent'
+      );
       return ApiResponse.success(res, history, 'Payment history retrieved');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
@@ -77,7 +79,9 @@ const paymentController = {
     try {
       const { payment_hash } = req.body;
       if (!payment_hash) {
-        return ApiResponse.validationError(res, [{ field: 'payment_hash', message: 'payment_hash is required' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'payment_hash', message: 'payment_hash is required' },
+        ]);
       }
       const tx = await paymentService.confirmBySender(req.user.id, payment_hash);
       return ApiResponse.success(res, tx, 'Payment confirmed');
@@ -104,7 +108,8 @@ const paymentController = {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
       const { payment_hash } = req.body;
-      if (!payment_hash) return res.status(400).json({ success: false, message: 'payment_hash required' });
+      if (!payment_hash)
+        return res.status(400).json({ success: false, message: 'payment_hash required' });
       const tx = await paymentService.confirmPayment(payment_hash);
       return res.json({ success: true, confirmed: !!tx });
     } catch (err) {

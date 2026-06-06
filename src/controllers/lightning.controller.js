@@ -81,7 +81,7 @@ const lightningController = {
       const { page = 1, limit = 20 } = req.query;
       const result = await lightningService.listTransactions(req.user.id, {
         page: Math.max(1, Number(page)),
-        limit: Math.min(50, Math.max(1, Number(limit)))
+        limit: Math.min(50, Math.max(1, Number(limit))),
       });
 
       return ApiResponse.paginated(res, result.transactions, {
@@ -98,14 +98,14 @@ const lightningController = {
     try {
       const proofs = await lightningService.getProofOfPayment(req.user.id, {
         paymentRequest: req.query.paymentRequest,
-        limit: Math.min(20, Math.max(1, Number(req.query.limit || 5)))
+        limit: Math.min(20, Math.max(1, Number(req.query.limit || 5))),
       });
 
       return ApiResponse.success(res, proofs, 'Proof of payment retrieved');
     } catch (error) {
       return ApiResponse.error(res, error.message, error.statusCode || 500, error.details || null);
     }
-  }
+  },
 };
 
 module.exports = lightningController;

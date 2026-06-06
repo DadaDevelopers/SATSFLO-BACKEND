@@ -13,5 +13,5 @@ module.exports = {
   authController,
   userController,
   cycleController,
-  healthController
+  healthController,
 };

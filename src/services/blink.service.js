@@ -27,10 +27,10 @@ class BlinkService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-KEY': blinkConfig.apiKey
+          'X-API-KEY': blinkConfig.apiKey,
         },
         body: JSON.stringify({ query, variables }),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       const payload = await response.json().catch(() => ({}));
@@ -40,7 +40,11 @@ class BlinkService {
       }
 
       if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-        throw buildBlinkError(payload.errors.map((entry) => entry.message).join('; '), 502, payload.errors);
+        throw buildBlinkError(
+          payload.errors.map((entry) => entry.message).join('; '),
+          502,
+          payload.errors
+        );
       }
 
       return payload.data;
@@ -77,7 +81,7 @@ class BlinkService {
     return (data?.me?.defaultAccount?.wallets || []).map((wallet) => ({
       id: wallet.id,
       walletCurrency: wallet.walletCurrency,
-      balance: Number(wallet.balance || 0)
+      balance: Number(wallet.balance || 0),
     }));
   }
 
@@ -113,8 +117,8 @@ class BlinkService {
         input: {
           walletId,
           amount: String(amountSats),
-          memo: memo || undefined
-        }
+          memo: memo || undefined,
+        },
       }
     );
 
@@ -135,14 +139,14 @@ class BlinkService {
       {
         input: {
           walletId,
-          paymentRequest
-        }
+          paymentRequest,
+        },
       }
     );
 
     raiseIfBlinkErrors(data?.lnInvoiceFeeProbe?.errors);
     return {
-      amountSats: Number(data?.lnInvoiceFeeProbe?.amount || 0)
+      amountSats: Number(data?.lnInvoiceFeeProbe?.amount || 0),
     };
   }
 
@@ -161,8 +165,8 @@ class BlinkService {
       {
         input: {
           walletId,
-          paymentRequest
-        }
+          paymentRequest,
+        },
       }
     );
 
@@ -186,8 +190,8 @@ class BlinkService {
         input: {
           walletId,
           lnurl,
-          amount: String(amountSats)
-        }
+          amount: String(amountSats),
+        },
       }
     );
 
@@ -211,8 +215,8 @@ class BlinkService {
         input: {
           walletId,
           lnAddress,
-          amount: String(amountSats)
-        }
+          amount: String(amountSats),
+        },
       }
     );
 
@@ -257,7 +261,7 @@ class BlinkService {
       .map((entry) => ({
         paymentRequest: entry.initiationVia?.paymentRequest || null,
         paymentHash: entry.initiationVia?.paymentHash || null,
-        preImage: entry.settlementVia?.preImage || null
+        preImage: entry.settlementVia?.preImage || null,
       }));
   }
 }

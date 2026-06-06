@@ -11,7 +11,7 @@ const morgan = require('morgan');
 const path = require('path');
 require('dotenv').config({
   path: path.resolve(__dirname, '../.env'),
-  quiet: true
+  quiet: true,
 });
 
 const routes = require('./routes');
@@ -34,19 +34,23 @@ app.use(helmet());
 
 // CORS - Configure for mobile app
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
   : ['*'];
 
-app.use(cors({
-  origin: allowedOrigins.includes('*') ? '*' : (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  maxAge: 86400
-}));
+app.use(
+  cors({
+    origin: allowedOrigins.includes('*')
+      ? '*'
+      : (origin, cb) => {
+          if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+          cb(new Error('Not allowed by CORS'));
+        },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true,
+    maxAge: 86400,
+  })
+);
 
 // ==================== PARSING MIDDLEWARE ====================
 
@@ -65,11 +69,13 @@ app.use(sanitizeBody);
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
-  app.use(morgan('combined', {
-    stream: {
-      write: (message) => logger.http(message.trim())
-    }
-  }));
+  app.use(
+    morgan('combined', {
+      stream: {
+        write: (message) => logger.http(message.trim()),
+      },
+    })
+  );
 }
 
 // ==================== RATE LIMITING ====================
@@ -84,7 +90,7 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     message: 'Satsflow API is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -93,7 +99,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 

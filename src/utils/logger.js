@@ -33,7 +33,7 @@ function formatLog(level, message, meta = {}) {
     message,
     ...meta,
     timestamp: new Date().toISOString(),
-    pid: process.pid
+    pid: process.pid,
   };
 }
 
@@ -48,7 +48,7 @@ const logger = {
     const log = formatLog('ERROR', message, {
       error: error.message || error,
       stack: error.stack,
-      code: error.code
+      code: error.code,
     });
     console.error(JSON.stringify(log));
     appendToFile('error.log', log);
@@ -74,7 +74,7 @@ const logger = {
       console.log(JSON.stringify(log));
     }
     appendToFile('access.log', log);
-  }
+  },
 };
 
 module.exports = logger;

@@ -7,7 +7,7 @@
 const path = require('path');
 require('dotenv').config({
   path: path.resolve(__dirname, '../.env'),
-  quiet: true
+  quiet: true,
 });
 const app = require('./app');
 const { pool } = require('./config/database');
@@ -42,7 +42,7 @@ async function startServer() {
         port: PORT,
         environment: NODE_ENV,
         nodeVersion: process.version,
-        pid: process.pid
+        pid: process.pid,
       });
 
       console.log(`
@@ -74,7 +74,6 @@ async function startServer() {
       }
       throw error;
     });
-
   } catch (error) {
     logger.error('Failed to start server', error);
     process.exit(1);

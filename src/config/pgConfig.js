@@ -4,7 +4,7 @@ const path = require('path');
 
 require('dotenv').config({
   path: path.resolve(__dirname, '../../.env'),
-  quiet: true
+  quiet: true,
 });
 
 function getSslConfig() {
@@ -36,7 +36,7 @@ function getClientConfig() {
     ? {
         connectionString: getConnectionString(),
         ssl,
-        connectionTimeoutMillis: Number.parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000', 10)
+        connectionTimeoutMillis: Number.parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000', 10),
       }
     : {
         host: process.env.DB_HOST || 'localhost',
@@ -45,7 +45,7 @@ function getClientConfig() {
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         ssl,
-        connectionTimeoutMillis: Number.parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000', 10)
+        connectionTimeoutMillis: Number.parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000', 10),
       };
 }
 
@@ -61,5 +61,5 @@ module.exports = {
   getSslConfig,
   getConnectionString,
   getClientConfig,
-  getPoolConfig
+  getPoolConfig,
 };

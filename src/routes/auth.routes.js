@@ -8,20 +8,31 @@ const router = express.Router();
 const authController = require('../controllers/auth/auth.controller');
 const { authenticateToken } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
-const { authLimiter, passwordResetLimiter, registrationLimiter, resendVerificationLimiter } = require('../middleware/rateLimiter');
+const {
+  authLimiter,
+  passwordResetLimiter,
+  registrationLimiter,
+  resendVerificationLimiter,
+} = require('../middleware/rateLimiter');
 const {
   registerValidation,
   loginValidation,
   refreshTokenValidation,
   forgotPasswordValidation,
-  resetPasswordValidation
+  resetPasswordValidation,
 } = require('../validators/auth.validator');
 
 /**
  * POST /api/v1/auth/register
  * Body: { name, email, password, confirm_password }
  */
-router.post('/register', registrationLimiter, registerValidation, validate, authController.register);
+router.post(
+  '/register',
+  registrationLimiter,
+  registerValidation,
+  validate,
+  authController.register
+);
 
 /**
  * POST /api/v1/auth/login
@@ -33,7 +44,13 @@ router.post('/login', authLimiter, loginValidation, validate, authController.log
  * POST /api/v1/auth/forgot-password
  * Body: { email } — sends 4-digit OTP to email
  */
-router.post('/forgot-password', passwordResetLimiter, forgotPasswordValidation, validate, authController.forgotPassword);
+router.post(
+  '/forgot-password',
+  passwordResetLimiter,
+  forgotPasswordValidation,
+  validate,
+  authController.forgotPassword
+);
 
 /**
  * POST /api/v1/auth/verify-otp
@@ -45,7 +62,12 @@ router.post('/verify-otp', authLimiter, authController.verifyOtp);
  * POST /api/v1/auth/reset-password/:token
  * Body: { password, confirm_password }
  */
-router.post('/reset-password/:token', resetPasswordValidation, validate, authController.resetPassword);
+router.post(
+  '/reset-password/:token',
+  resetPasswordValidation,
+  validate,
+  authController.resetPassword
+);
 
 /**
  * POST /api/v1/auth/refresh
@@ -75,7 +97,12 @@ router.get('/verify-email/:token', authController.verifyEmail);
  * POST /api/v1/auth/resend-verification
  * Requires Bearer token. Generates a new token and resends the verification email.
  */
-router.post('/resend-verification', authenticateToken, resendVerificationLimiter, authController.resendVerification);
+router.post(
+  '/resend-verification',
+  authenticateToken,
+  resendVerificationLimiter,
+  authController.resendVerification
+);
 
 /**
  * GET /api/v1/auth/me

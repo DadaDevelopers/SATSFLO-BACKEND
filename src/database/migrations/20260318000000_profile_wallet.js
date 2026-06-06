@@ -12,10 +12,14 @@ exports.up = (pgm) => {
   pgm.sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);
 
   // Luteal phase override on cycle_profiles
-  pgm.sql(`ALTER TABLE cycle_profiles ADD COLUMN IF NOT EXISTS luteal_phase_length SMALLINT DEFAULT 14 CHECK (luteal_phase_length BETWEEN 7 AND 21)`);
+  pgm.sql(
+    `ALTER TABLE cycle_profiles ADD COLUMN IF NOT EXISTS luteal_phase_length SMALLINT DEFAULT 14 CHECK (luteal_phase_length BETWEEN 7 AND 21)`
+  );
 
   // Ignore irregular cycle flag
-  pgm.sql(`ALTER TABLE cycle_profiles ADD COLUMN IF NOT EXISTS ignore_irregular_cycle BOOLEAN NOT NULL DEFAULT false`);
+  pgm.sql(
+    `ALTER TABLE cycle_profiles ADD COLUMN IF NOT EXISTS ignore_irregular_cycle BOOLEAN NOT NULL DEFAULT false`
+  );
 };
 
 exports.down = (pgm) => {

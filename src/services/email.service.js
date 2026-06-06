@@ -4,9 +4,9 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM        = 'SatsFlo <info@satsflo.app>';
+const FROM = 'SatsFlo <info@satsflo.app>';
 const BRAND_COLOR = '#FF4081';
-const YEAR        = new Date().getFullYear();
+const YEAR = new Date().getFullYear();
 
 // ─── Shared layout ─────────────────────────────────────────────────────────────
 
@@ -94,13 +94,16 @@ async function send({ to, subject, html }) {
 const sendOTPEmail = async (email, name, otp) => {
   const digits = String(otp).split('');
 
-  const digitBoxes = digits.map(d =>
-    `<td style="width:44px;height:52px;background:#FFF7ED;border:2px solid #FED7AA;
+  const digitBoxes = digits
+    .map(
+      (d) =>
+        `<td style="width:44px;height:52px;background:#FFF7ED;border:2px solid #FED7AA;
                 border-radius:10px;text-align:center;vertical-align:middle;
                 font-size:28px;font-weight:700;color:${BRAND_COLOR};
                 font-family:monospace;padding:0 6px;">${d}</td>
      <td style="width:8px;"></td>`
-  ).join('');
+    )
+    .join('');
 
   const body = `
     <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">

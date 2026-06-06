@@ -12,8 +12,20 @@ function isValidDate(str) {
 // ── Value normalisation (frontend camelCase ↔ DB snake_case) ─────────────────
 
 // flow: frontend uses camelCase, DB stores snake_case
-const FLOW_TO_DB   = { veryHeavy: 'very_heavy', light: 'light', medium: 'medium', heavy: 'heavy', spotting: 'spotting' };
-const FLOW_FROM_DB = { very_heavy: 'veryHeavy', light: 'light', medium: 'medium', heavy: 'heavy', spotting: 'spotting' };
+const FLOW_TO_DB = {
+  veryHeavy: 'very_heavy',
+  light: 'light',
+  medium: 'medium',
+  heavy: 'heavy',
+  spotting: 'spotting',
+};
+const FLOW_FROM_DB = {
+  very_heavy: 'veryHeavy',
+  light: 'light',
+  medium: 'medium',
+  heavy: 'heavy',
+  spotting: 'spotting',
+};
 
 // symptoms, mood, medicine are TEXT[] — stored exactly as frontend sends them
 // (no DB constraint on those columns)
@@ -24,41 +36,40 @@ function toFrontend(log) {
   if (!log) {
     // Return the default empty shape so GET always returns a consistent object
     return {
-      flow_level:       null,
-      symptoms:         [],
-      mood:             [],
-      notes:            null,
-      medicine:         [],
-      weight:           null,
-      weight_unit:      'kg',
-      temperature:      null,
+      flow_level: null,
+      symptoms: [],
+      mood: [],
+      notes: null,
+      medicine: [],
+      weight: null,
+      weight_unit: 'kg',
+      temperature: null,
       temperature_unit: 'C',
-      water_intake_ml:  0,
-      period_start:     false,
-      period_end:       false,
+      water_intake_ml: 0,
+      period_start: false,
+      period_end: false,
     };
   }
 
   return {
-    flow_level:       (log.flow_level ? (FLOW_FROM_DB[log.flow_level] ?? log.flow_level) : null),
-    symptoms:         log.symptoms         ?? [],
-    mood:             log.moods            ?? [],
-    notes:            log.note             ?? null,
-    medicine:         log.medicine         ?? [],
-    weight:           log.weight           != null ? Number(log.weight) : null,
-    weight_unit:      log.weight_unit      ?? 'kg',
-    temperature:      log.temperature      != null ? Number(log.temperature) : null,
+    flow_level: log.flow_level ? (FLOW_FROM_DB[log.flow_level] ?? log.flow_level) : null,
+    symptoms: log.symptoms ?? [],
+    mood: log.moods ?? [],
+    notes: log.note ?? null,
+    medicine: log.medicine ?? [],
+    weight: log.weight != null ? Number(log.weight) : null,
+    weight_unit: log.weight_unit ?? 'kg',
+    temperature: log.temperature != null ? Number(log.temperature) : null,
     temperature_unit: log.temperature_unit ?? 'C',
-    water_intake_ml:  log.water_intake     ?? 0,
-    period_start:     log.period_start     ?? false,
-    period_end:       log.period_end       ?? false,
+    water_intake_ml: log.water_intake ?? 0,
+    period_start: log.period_start ?? false,
+    period_end: log.period_end ?? false,
   };
 }
 
 // ── Controller ────────────────────────────────────────────────────────────────
 
 const dayLogsController = {
-
   // GET /logs?date=YYYY-MM-DD
   async getByDate(req, res) {
     try {
@@ -145,7 +156,7 @@ const dayLogsController = {
 
       // period_start / period_end (set by cycle endpoints, but accept here too)
       if (body.period_start !== undefined) fields.period_start = body.period_start;
-      if (body.period_end   !== undefined) fields.period_end   = body.period_end;
+      if (body.period_end !== undefined) fields.period_end = body.period_end;
 
       const log = await dayLogsService.upsert(req.user.id, date, fields);
       return ApiResponse.success(res, toFrontend(log), 'Day log saved');

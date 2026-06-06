@@ -21,7 +21,7 @@ const startPeriod = async (req, res, next) => {
     const cycle = await cycleService.startPeriod(req.user.id, {
       date,
       flowIntensity,
-      notes
+      notes,
     });
 
     return ApiResponse.created(res, cycle, 'Period started');
@@ -103,17 +103,17 @@ const getCurrentCycle = async (req, res, next) => {
     // Add snake_case aliases for frontend compatibility
     return ApiResponse.success(res, {
       ...cycle,
-      current_day:            cycle.dayOfCycle,
-      cycle_length:           cycle.cycleLength,
-      period_length:          cycle.periodLength,
-      ovulation_day:          cycle.ovulationDay,
-      current_phase:          cycle.phase?.name ?? null,
+      current_day: cycle.dayOfCycle,
+      cycle_length: cycle.cycleLength,
+      period_length: cycle.periodLength,
+      ovulation_day: cycle.ovulationDay,
+      current_phase: cycle.phase?.name ?? null,
       days_until_next_period: cycle.predictions?.nextPeriod?.daysUntil ?? null,
-      last_period_start:      cycle.startDate ?? null,
-      period_dates:           cycle.period_dates ?? [],
-      fertility_window:       cycle.fertility_window ?? [],
-      ovulation_date:         cycle.ovulation_date ?? null,
-      pregnancy_chance:       cycle.pregnancy_chance ?? null,
+      last_period_start: cycle.startDate ?? null,
+      period_dates: cycle.period_dates ?? [],
+      fertility_window: cycle.fertility_window ?? [],
+      ovulation_date: cycle.ovulation_date ?? null,
+      pregnancy_chance: cycle.pregnancy_chance ?? null,
     });
   } catch (error) {
     next(error);
@@ -132,7 +132,7 @@ const getCycles = async (req, res, next) => {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       startDate,
-      endDate
+      endDate,
     });
 
     return ApiResponse.paginated(res, result.cycles, result.pagination);
@@ -161,11 +161,7 @@ const getCycleById = async (req, res, next) => {
  */
 const updateCycle = async (req, res, next) => {
   try {
-    const cycle = await cycleService.updateCycle(
-      req.user.id,
-      req.params.cycleId,
-      req.body
-    );
+    const cycle = await cycleService.updateCycle(req.user.id, req.params.cycleId, req.body);
 
     return ApiResponse.success(res, cycle, 'Cycle updated');
   } catch (error) {
@@ -211,15 +207,17 @@ const getAnalytics = async (req, res, next) => {
 
     // Default to last 6 months if no dates provided
     const end = endDate || new Date().toISOString().split('T')[0];
-    const start = startDate || (() => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 6);
-      return d.toISOString().split('T')[0];
-    })();
+    const start =
+      startDate ||
+      (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 6);
+        return d.toISOString().split('T')[0];
+      })();
 
     const analytics = await cycleService.getAnalytics(req.user.id, {
       startDate: start,
-      endDate: end
+      endDate: end,
     });
 
     return ApiResponse.success(res, analytics);
@@ -283,7 +281,7 @@ const addCycleLog = async (req, res, next) => {
   try {
     const entry = await cycleService.logDailyEntry(req.user.id, {
       ...req.body,
-      cycleId: req.params.cycleId
+      cycleId: req.params.cycleId,
     });
 
     return ApiResponse.success(res, entry, 'Cycle log added');
