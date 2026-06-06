@@ -495,7 +495,7 @@ class AuthService {
     });
 
     const refreshToken = jwt.sign(
-      { userId: user.id },
+      { userId: user.id, jti: crypto.randomBytes(16).toString('hex') },
       jwtConfig.refreshSecret,
       { expiresIn: jwtConfig.refreshExpiresIn }
     );
