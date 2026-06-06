@@ -278,7 +278,7 @@ class CycleService {
     const dayOfCycle     = (daysSinceStart % cycleLength) + 1;
 
     const phase       = this.calculatePhase(dayOfCycle, cycleLength, periodLength, ovulationDay);
-    const predictions = this.calculatePredictions(startDate, cycleLength, periodLength, cyclesPassed, today);
+    const predictions = this.calculatePredictions(startDate, cycleLength, periodLength, cyclesPassed, today, lutealLength);
 
     const addDays = (base, n) => {
       const d = new Date(base);
@@ -548,7 +548,7 @@ class CycleService {
    * startDate and today are pre-normalised Date objects (UTC midnight).
    * cyclesPassed is how many full cycles have elapsed since startDate.
    */
-  calculatePredictions(startDate, avgCycleLength, avgPeriodLength, cyclesPassed, today) {
+  calculatePredictions(startDate, avgCycleLength, avgPeriodLength, cyclesPassed, today, lutealPhaseLength = 14) {
     const addDays = (base, n) => {
       const d = new Date(base);
       d.setUTCDate(d.getUTCDate() + n);
@@ -560,8 +560,8 @@ class CycleService {
     const nextPeriodEndDate = addDays(nextPeriodDate, avgPeriodLength - 1);
     const daysUntilPeriod   = Math.round((nextPeriodDate - today) / 86_400_000);
 
-    // Ovulation for the NEXT cycle = next period start - 14 days
-    const ovulationDate      = addDays(nextPeriodDate, -14);
+    // Ovulation for the NEXT cycle = next period start - luteal phase length
+    const ovulationDate      = addDays(nextPeriodDate, -lutealPhaseLength);
     const daysUntilOvulation = Math.round((ovulationDate - today) / 86_400_000);
 
     const fertileStart = addDays(ovulationDate, -5);
