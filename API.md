@@ -218,7 +218,9 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 | `PUT`  | `/cycles/end` | Update end date of current period. Body: `{ "date": "YYYY-MM-DD" }` |
 | `GET`  | `/cycles/current` | Current cycle status with phase + predictions |
 | `GET`  | `/cycles/predictions` | Predictions only (next period, ovulation, fertile window) |
-| `GET`  | `/cycles/analytics` | Analytics. Query: `startDate?, endDate?` |
+| `GET`  | `/cycles/phases` | Phase date ranges for the current cycle (wheel segments) |
+| `GET`  | `/cycles/forecast?months=3` | Upcoming period + ovulation predictions for N months (max 12) |
+| `GET`  | `/cycles/analytics` | Cycle analytics. Query: `startDate?, endDate?` (default: last 6 months) |
 | `POST` | `/cycles/log` | Log a daily entry. Body: `date, flowIntensity?, temperature?, notes?` |
 | `POST` | `/cycles/:cycleId/logs` | Log scoped to a specific cycle. |
 | `GET`  | `/cycles/log/:date` | Get daily log for date (`YYYY-MM-DD`) |
@@ -226,6 +228,29 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 | `GET`  | `/cycles/:cycleId` | Single cycle by ID |
 | `PUT`  | `/cycles/:cycleId` | Update cycle. Fields: `flowIntensity?, notes?, startDate?, endDate?` |
 | `DELETE` | `/cycles/:cycleId` | Delete cycle |
+
+### Calculation formulas
+
+These drive every period/ovulation prediction in the API:
+
+```
+cycle_day         = floor((today_UTC - last_period_start) / 86400000) % cycle_length + 1
+next_period_date  = last_period_start + (cycles_passed + 1) × cycle_length   ← uses cycle_length only
+period_end_date   = next_period_date + period_length - 1
+ovulation_day     = cycle_length - luteal_phase_length                        ← within the cycle
+next_ovulation    = next_period_date - luteal_phase_length                    ← absolute date
+fertile_window    = [next_ovulation - 5 … next_ovulation + 1]
+
+Phase boundaries (cycle_day based):
+  cycle_day ≤ period_length             → menstrual
+  cycle_day ≤ ovulation_day - 2         → follicular
+  cycle_day ≤ ovulation_day + 2         → ovulation
+  else                                  → luteal
+```
+
+> **Important:** `next_period_date` is calculated from `cycle_length` **only** — changing `luteal_phase_length` in settings shifts where ovulation lands within the cycle but does **not** affect the predicted period date.
+
+---
 
 **`GET /cycles/current` response:**
 ```json
@@ -243,9 +268,9 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
   "fertility_window":        ["2026-03-18", "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22"],
   "ovulation_date":          "2026-03-23",
   "pregnancy_chance":        "Low",
-  "phase": { "name": "luteal", "day": 21, "description": "..." },
+  "phase": { "name": "luteal", "day": 21, "description": "Luteal phase - Post-ovulation" },
   "predictions": {
-    "nextPeriod":    { "date": "YYYY-MM-DD", "daysUntil": 7 },
+    "nextPeriod":    { "date": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "daysUntil": 7 },
     "ovulation":     { "date": "YYYY-MM-DD", "daysUntil": -7 },
     "fertileWindow": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" }
   }
@@ -255,10 +280,100 @@ Full period tracking history. All require `Authorization: Bearer <token>`.
 > `last_period_start` is an alias for `startDate`.
 > `period_dates` — array of YYYY-MM-DD strings for each day of the period (length = `period_length`).
 > `fertility_window` — 5 dates from `ovulation_day - 5` to `ovulation_day - 1` as absolute dates.
-> `ovulation_date` — absolute date string for the ovulation day.
-> `pregnancy_chance` — `"High"` (within fertile window ±1 day), `"Medium"` (2 days outside), `"Low"` (otherwise).
-> The home screen uses `days_until_next_period` (with `next_`).
-> The cycle-profile fallback uses `days_until_period` (without `next_`).
+> `ovulation_date` — absolute date string for the ovulation day of the current cycle.
+> `pregnancy_chance` — `"High"` (within fertile window + 1 day of ovulation), `"Medium"` (within ±2 days beyond that), `"Low"` (otherwise).
+> `days_until_next_period` — use this field on the home/wheel screen (includes `next_`).
+> Returns `null` data with `200 OK` if no active cycle exists.
+
+---
+
+**`GET /cycles/predictions` response:**
+```json
+{
+  "nextPeriod": {
+    "date":     "2026-04-07",
+    "endDate":  "2026-04-11",
+    "daysUntil": 7
+  },
+  "ovulation": {
+    "date":     "2026-03-24",
+    "daysUntil": -7
+  },
+  "fertileWindow": {
+    "start": "2026-03-19",
+    "end":   "2026-03-25"
+  }
+}
+```
+
+> Returns `null` data with `200 OK` if no cycle exists.
+> `daysUntil` is negative once the date has passed.
+
+---
+
+**`GET /cycles/phases` response:**
+```json
+{
+  "current_day": 21,
+  "cycle_start": "2026-03-10",
+  "phases": {
+    "menstrual":  { "start": "2026-03-10", "end": "2026-03-14", "days": 5 },
+    "follicular": { "start": "2026-03-15", "end": "2026-03-21", "days": 7 },
+    "ovulation":  { "start": "2026-03-22", "end": "2026-03-26", "days": 5 },
+    "luteal":     { "start": "2026-03-27", "end": "2026-04-06", "days": 11 }
+  }
+}
+```
+
+> All dates are absolute YYYY-MM-DD strings anchored to the current cycle's start date.
+> Used to render the four wheel segments. `days` is the width of each segment.
+> Returns `null` data with `200 OK` if no cycle exists.
+
+---
+
+**`GET /cycles/forecast?months=3` response:**
+```json
+{
+  "cycle_length":  28,
+  "period_length": 5,
+  "periods": [
+    { "start": "2026-04-07", "end": "2026-04-11" },
+    { "start": "2026-05-05", "end": "2026-05-09" },
+    { "start": "2026-06-02", "end": "2026-06-06" }
+  ],
+  "ovulations": [
+    { "date": "2026-03-24", "fertile_start": "2026-03-19", "fertile_end": "2026-03-25" },
+    { "date": "2026-04-21", "fertile_start": "2026-04-16", "fertile_end": "2026-04-22" },
+    { "date": "2026-05-19", "fertile_start": "2026-05-14", "fertile_end": "2026-05-20" }
+  ]
+}
+```
+
+> `months` query param: 1–12, default 3. Capped at 12 server-side.
+> `ovulation.date` is computed as `period_start - luteal_phase_length` (respects user's saved luteal phase setting).
+> `fertile_start` is 5 days before ovulation; `fertile_end` is 1 day after.
+> Returns `null` data with `200 OK` if no cycle history exists.
+
+---
+
+**`GET /cycles/analytics` response:**
+```json
+{
+  "totalCycles":         6,
+  "averageCycleLength":  28,
+  "averagePeriodLength": 5,
+  "shortestCycle":       26,
+  "longestCycle":        30,
+  "cycleVariability":    2,
+  "cycles":              [ /* array of cycle objects */ ]
+}
+```
+
+> Default date range: last 6 months. Pass `?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` to override.
+> `cycleVariability` is the standard deviation of cycle lengths (rounded). `null` if fewer than 2 cycles.
+> `averageCycleLength` / `averagePeriodLength` are `null` when there is not enough data.
+
+---
 
 **Flow intensity:** `spotting` · `light` · `medium` · `heavy` · `very_heavy`
 
