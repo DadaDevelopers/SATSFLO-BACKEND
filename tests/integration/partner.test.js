@@ -78,7 +78,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanupTestUsers();
-  await pool.end();
 });
 
 // Clean partnership/invite tables between test groups so they don't bleed.

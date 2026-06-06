@@ -152,4 +152,34 @@ describe('CycleService.calculatePredictions', () => {
     expect(preds).toHaveProperty('fertileWindow.start');
     expect(preds).toHaveProperty('fertileWindow.end');
   });
+
+  // ── Luteal phase bug (line 564 hardcodes -14) ──────────────────────────────
+  // calculatePredictions needs a lutealPhaseLength param (6th arg) for these to pass.
+  // Until then both tests fail — that's intentional: they document the required fix.
+
+  test('ovulation uses luteal_phase_length, not hardcoded 14', () => {
+    const startDate = new Date('2026-01-01T00:00:00Z');
+    const fixedToday = new Date('2026-01-01T00:00:00Z');
+
+    // luteal=16 → ovulation should be 16 days before next period (day 12 of cycle, not day 14)
+    const result = service.calculatePredictions(startDate, 28, 5, 0, fixedToday, 16);
+
+    const nextPeriod = new Date(result.nextPeriod.date);
+    const ovulation  = new Date(result.ovulation.date);
+    const daysBeforePeriod = (nextPeriod - ovulation) / (1000 * 60 * 60 * 24);
+    expect(daysBeforePeriod).toBe(16);
+  });
+
+  test('hardcoded -14 bug: ovulation is wrong when luteal phase is not 14', () => {
+    const startDate = new Date('2026-01-01T00:00:00Z');
+    const fixedToday = new Date('2026-01-01T00:00:00Z');
+
+    const result14 = service.calculatePredictions(startDate, 28, 5, 0, fixedToday, 14);
+    const result16 = service.calculatePredictions(startDate, 28, 5, 0, fixedToday, 16);
+
+    const ov14 = new Date(result14.ovulation.date);
+    const ov16 = new Date(result16.ovulation.date);
+    const diff = (ov14 - ov16) / (1000 * 60 * 60 * 24);
+    expect(diff).toBe(2); // fails until line 564 uses lutealPhaseLength instead of 14
+  });
 });

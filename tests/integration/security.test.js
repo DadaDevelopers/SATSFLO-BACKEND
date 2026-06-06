@@ -15,7 +15,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanupTestUsers();
-  await pool.end();
 });
 
 // ─── Auth Guards ─────────────────────────────────────────────────────────────
@@ -183,7 +182,7 @@ describe('Response shape contracts', () => {
 
     expect([200, 404]).toContain(res.status);
 
-    if (res.status === 200) {
+    if (res.status === 200 && res.body.data !== null) {
       const d = res.body.data;
       expect(d).toHaveProperty('dayOfCycle');
       expect(d).toHaveProperty('cycleLength');

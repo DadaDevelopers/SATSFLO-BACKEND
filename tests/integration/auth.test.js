@@ -7,7 +7,6 @@ const { pool, createTestUser, cleanupUser, cleanupTestUsers } = require('../help
 
 afterAll(async () => {
   await cleanupTestUsers();
-  await pool.end();
 });
 
 // ─── Register ────────────────────────────────────────────────────────────────
