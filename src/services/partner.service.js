@@ -49,11 +49,11 @@ function partnerId(partnership, myRole) {
 function myShareSettings(partnership, myRole) {
   const prefix = `${myRole}_share_`;
   return {
-    share_period_dates:   partnership[`${prefix}period_dates`],
+    share_period_dates: partnership[`${prefix}period_dates`],
     share_fertile_window: partnership[`${prefix}fertile_window`],
     share_symptoms_moods: partnership[`${prefix}symptoms_moods`],
     share_cycle_insights: partnership[`${prefix}cycle_insights`],
-    share_sex_drive:      partnership[`${prefix}sex_drive`],
+    share_sex_drive: partnership[`${prefix}sex_drive`],
   };
 }
 
@@ -66,10 +66,10 @@ function partnerShareSettings(partnership, myRole) {
 // ── Phase calculation (mirrors cycleProfile.service) ─────────────────────────
 
 const PHASE_DESCRIPTIONS = {
-  menstrual:  'Your partner is in their period. They may need some extra care right now.',
+  menstrual: 'Your partner is in their period. They may need some extra care right now.',
   follicular: 'Your partner is in the follicular phase. Energy levels are rising.',
-  ovulation:  'Your partner is in the ovulation period. Keep in touch and stay connected.',
-  luteal:     'Your partner is in the luteal phase. They may experience mood changes.',
+  ovulation: 'Your partner is in the ovulation period. Keep in touch and stay connected.',
+  luteal: 'Your partner is in the luteal phase. They may experience mood changes.',
 };
 
 function calculatePhase(profile) {
@@ -108,13 +108,13 @@ function calculatePhase(profile) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PartnerService {
-
   // ── Generate invite ─────────────────────────────────────────────────────────
 
   async generateInvite(senderId, sharingSettings = {}) {
     // Must not already have an active partner
     const existing = await findPartnership(senderId);
-    if (existing) throw err('You already have an active partner. Unpair first to invite someone new.', 409);
+    if (existing)
+      throw err('You already have an active partner. Unpair first to invite someone new.', 409);
 
     // Expire any previous pending invites from this user
     await pool.query(
@@ -131,7 +131,10 @@ class PartnerService {
         `SELECT id FROM partner_invites WHERE invite_code = $1 AND status = 'pending'`,
         [candidate]
       );
-      if (check.rows.length === 0) { inviteCode = candidate; break; }
+      if (check.rows.length === 0) {
+        inviteCode = candidate;
+        break;
+      }
     }
     if (!inviteCode) throw err('Failed to generate unique invite code, please try again', 500);
 
@@ -147,12 +150,14 @@ class PartnerService {
                  share_period_dates, share_fertile_window, share_symptoms_moods,
                  share_cycle_insights, share_sex_drive`,
       [
-        senderId, inviteCode, expiresAt,
-        sharingSettings.share_period_dates   ?? true,
+        senderId,
+        inviteCode,
+        expiresAt,
+        sharingSettings.share_period_dates ?? true,
         sharingSettings.share_fertile_window ?? true,
         sharingSettings.share_symptoms_moods ?? false,
         sharingSettings.share_cycle_insights ?? false,
-        sharingSettings.share_sex_drive      ?? false,
+        sharingSettings.share_sex_drive ?? false,
       ]
     );
 
@@ -186,10 +191,7 @@ class PartnerService {
 
     // Auto-expire if past expiry
     if (invite.status === 'pending' && new Date(invite.expires_at) < new Date()) {
-      await pool.query(
-        `UPDATE partner_invites SET status = 'expired' WHERE id = $1`,
-        [invite.id]
-      );
+      await pool.query(`UPDATE partner_invites SET status = 'expired' WHERE id = $1`, [invite.id]);
       invite.status = 'expired';
     }
 
@@ -208,7 +210,11 @@ class PartnerService {
   async acceptInvite(receiverId, inviteCode) {
     // Receiver must not already have a partner
     const existing = await findPartnership(receiverId);
-    if (existing) throw err('You already have an active partner. Unpair first to connect with someone new.', 409);
+    if (existing)
+      throw err(
+        'You already have an active partner. Unpair first to connect with someone new.',
+        409
+      );
 
     // Find invite
     const inviteResult = await pool.query(
@@ -221,7 +227,10 @@ class PartnerService {
       await pool.query(`UPDATE partner_invites SET status = 'expired' WHERE id = $1`, [invite.id]);
       throw err('This invite code has expired', 410);
     }
-    logger.debug('acceptInvite comparison', { inviterId: invite.sender_id, acceptorId: receiverId });
+    logger.debug('acceptInvite comparison', {
+      inviterId: invite.sender_id,
+      acceptorId: receiverId,
+    });
     if (invite.sender_id === receiverId) throw err('You cannot accept your own invite', 400);
 
     // Sender must not already have a partner (race condition guard)
@@ -237,23 +246,23 @@ class PartnerService {
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, user_a_id, user_b_id, created_at`,
       [
-        invite.sender_id, receiverId,
-        invite.share_period_dates, invite.share_fertile_window,
-        invite.share_symptoms_moods, invite.share_cycle_insights, invite.share_sex_drive,
+        invite.sender_id,
+        receiverId,
+        invite.share_period_dates,
+        invite.share_fertile_window,
+        invite.share_symptoms_moods,
+        invite.share_cycle_insights,
+        invite.share_sex_drive,
       ]
     );
 
     // Mark invite accepted
-    await pool.query(
-      `UPDATE partner_invites SET status = 'accepted' WHERE id = $1`,
-      [invite.id]
-    );
+    await pool.query(`UPDATE partner_invites SET status = 'accepted' WHERE id = $1`, [invite.id]);
 
     // Fetch partner (sender) info
-    const partnerResult = await pool.query(
-      `SELECT id, name, avatar_url FROM users WHERE id = $1`,
-      [invite.sender_id]
-    );
+    const partnerResult = await pool.query(`SELECT id, name, avatar_url FROM users WHERE id = $1`, [
+      invite.sender_id,
+    ]);
     const partner = partnerResult.rows[0];
     const ps = partnershipResult.rows[0];
 
@@ -271,16 +280,15 @@ class PartnerService {
     const { partnership, role } = found;
     const pId = partnerId(partnership, role);
 
-    const partnerResult = await pool.query(
-      `SELECT id, name, avatar_url FROM users WHERE id = $1`,
-      [pId]
-    );
+    const partnerResult = await pool.query(`SELECT id, name, avatar_url FROM users WHERE id = $1`, [
+      pId,
+    ]);
     const partner = partnerResult.rows[0];
 
     const myRole = role;
-    const myNickname      = partnership[`${myRole}_my_nickname`];
+    const myNickname = partnership[`${myRole}_my_nickname`];
     const partnerNickname = partnership[`${myRole}_partner_nickname`];
-    const partnerMode     = partnership[`${myRole}_partner_mode`];
+    const partnerMode = partnership[`${myRole}_partner_mode`];
 
     return {
       partnership_id: partnership.id,
@@ -301,7 +309,7 @@ class PartnerService {
     const { partnership, role } = found;
 
     const updates = {};
-    if (my_nickname !== undefined)      updates[`${role}_my_nickname`] = my_nickname;
+    if (my_nickname !== undefined) updates[`${role}_my_nickname`] = my_nickname;
     if (partner_nickname !== undefined) updates[`${role}_partner_nickname`] = partner_nickname;
 
     if (Object.keys(updates).length === 0) throw err('No fields to update', 400);
@@ -314,8 +322,10 @@ class PartnerService {
       values
     );
 
-    return { my_nickname: my_nickname ?? partnership[`${role}_my_nickname`],
-             partner_nickname: partner_nickname ?? partnership[`${role}_partner_nickname`] };
+    return {
+      my_nickname: my_nickname ?? partnership[`${role}_my_nickname`],
+      partner_nickname: partner_nickname ?? partnership[`${role}_partner_nickname`],
+    };
   }
 
   // ── Unpair ──────────────────────────────────────────────────────────────────
@@ -404,28 +414,28 @@ class PartnerService {
     const partnerNickname = partnership[`${myRole}_partner_nickname`] || partnerUser?.name;
 
     // Partner's cycle profile
-    const profileResult = await pool.query(
-      `SELECT * FROM cycle_profiles WHERE user_id = $1`,
-      [pId]
-    );
+    const profileResult = await pool.query(`SELECT * FROM cycle_profiles WHERE user_id = $1`, [
+      pId,
+    ]);
     const profile = profileResult.rows[0];
     if (!profile) throw err('Partner has not set up a cycle profile', 404);
 
-    const { currentDay, daysUntilPeriod, daysUntilOvulation, phase, pregnancyChance } = calculatePhase(profile);
+    const { currentDay, daysUntilPeriod, daysUntilOvulation, phase, pregnancyChance } =
+      calculatePhase(profile);
 
     const response = {
-      partner_name:       partnerUser?.name,
-      partner_nickname:   partnerNickname,
+      partner_name: partnerUser?.name,
+      partner_nickname: partnerNickname,
       partner_avatar_url: partnerUser?.avatar_url,
-      cycle_day:          currentDay,
-      cycle_phase:        phase,
-      phase_description:  PHASE_DESCRIPTIONS[phase] ?? '',
-      next_period_days:   daysUntilPeriod,
+      cycle_day: currentDay,
+      cycle_phase: phase,
+      phase_description: PHASE_DESCRIPTIONS[phase] ?? '',
+      next_period_days: daysUntilPeriod,
       next_ovulation_days: daysUntilOvulation,
-      pregnancy_chance:   pregnancyChance,
-      todays_symptoms:    null,
-      moods:              null,
-      sex_drive:          null,
+      pregnancy_chance: pregnancyChance,
+      todays_symptoms: null,
+      moods: null,
+      sex_drive: null,
     };
 
     if (perms.share_symptoms_moods) {
@@ -438,7 +448,7 @@ class PartnerService {
       );
       const log = logResult.rows[0];
       response.todays_symptoms = log?.symptoms ?? [];
-      response.moods           = log?.moods    ?? [];
+      response.moods = log?.moods ?? [];
     }
 
     if (!perms.share_sex_drive) {
@@ -462,10 +472,9 @@ class PartnerService {
     }
 
     // Partner's cycle profile
-    const profileResult = await pool.query(
-      `SELECT * FROM cycle_profiles WHERE user_id = $1`,
-      [pId]
-    );
+    const profileResult = await pool.query(`SELECT * FROM cycle_profiles WHERE user_id = $1`, [
+      pId,
+    ]);
     const profile = profileResult.rows[0];
     if (!profile) throw err('Partner has not set up a cycle profile', 404);
 
@@ -507,10 +516,9 @@ class PartnerService {
     }
 
     // Cycle count from stored cycles
-    const cycleCountResult = await pool.query(
-      `SELECT COUNT(*) FROM cycles WHERE user_id = $1`,
-      [pId]
-    );
+    const cycleCountResult = await pool.query(`SELECT COUNT(*) FROM cycles WHERE user_id = $1`, [
+      pId,
+    ]);
     response.cycle_count = parseInt(cycleCountResult.rows[0].count);
 
     return response;

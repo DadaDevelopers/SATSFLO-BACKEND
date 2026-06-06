@@ -2,11 +2,8 @@
 
 const { body, query } = require('express-validator');
 
-const walletIdRule = (source) => source('walletId')
-  .optional()
-  .trim()
-  .notEmpty()
-  .withMessage('walletId cannot be empty');
+const walletIdRule = (source) =>
+  source('walletId').optional().trim().notEmpty().withMessage('walletId cannot be empty');
 
 const amountRule = body('amountSats')
   .isInt({ min: 1 })
@@ -28,10 +25,7 @@ const paymentRequestRule = body('paymentRequest')
   .notEmpty()
   .withMessage('paymentRequest is required');
 
-const lnurlRule = body('lnurl')
-  .trim()
-  .notEmpty()
-  .withMessage('lnurl is required');
+const lnurlRule = body('lnurl').trim().notEmpty().withMessage('lnurl is required');
 
 const lightningAddressRule = body('lightningAddress')
   .trim()
@@ -44,30 +38,15 @@ const commentRule = body('comment')
   .isLength({ max: 500 })
   .withMessage('comment must not exceed 500 characters');
 
-const getWalletValidation = [
-  walletIdRule(query)
-];
+const getWalletValidation = [walletIdRule(query)];
 
-const syncWalletValidation = [
-  walletIdRule(body)
-];
+const syncWalletValidation = [walletIdRule(body)];
 
-const createInvoiceValidation = [
-  walletIdRule(body),
-  amountRule,
-  memoRule
-];
+const createInvoiceValidation = [walletIdRule(body), amountRule, memoRule];
 
-const probePaymentValidation = [
-  walletIdRule(body),
-  paymentRequestRule
-];
+const probePaymentValidation = [walletIdRule(body), paymentRequestRule];
 
-const payInvoiceValidation = [
-  walletIdRule(body),
-  paymentRequestRule,
-  memoRule
-];
+const payInvoiceValidation = [walletIdRule(body), paymentRequestRule, memoRule];
 
 const previewPaymentValidation = [
   walletIdRule(body),
@@ -99,32 +78,24 @@ const previewPaymentValidation = [
     }
 
     return true;
-  })
+  }),
 ];
 
-const payLnurlValidation = [
-  walletIdRule(body),
-  amountRule,
-  lnurlRule,
-  memoRule
-];
+const payLnurlValidation = [walletIdRule(body), amountRule, lnurlRule, memoRule];
 
 const payLightningAddressValidation = [
   walletIdRule(body),
   amountRule,
   lightningAddressRule,
-  memoRule
+  memoRule,
 ];
 
 const listTransactionsValidation = [
-  query('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('page must be a positive integer'),
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be a positive integer'),
   query('limit')
     .optional()
     .isInt({ min: 1, max: 50 })
-    .withMessage('limit must be between 1 and 50')
+    .withMessage('limit must be between 1 and 50'),
 ];
 
 const proofOfPaymentValidation = [
@@ -136,7 +107,7 @@ const proofOfPaymentValidation = [
     .optional()
     .trim()
     .notEmpty()
-    .withMessage('paymentRequest cannot be empty')
+    .withMessage('paymentRequest cannot be empty'),
 ];
 
 module.exports = {
@@ -149,5 +120,5 @@ module.exports = {
   payLnurlValidation,
   payLightningAddressValidation,
   listTransactionsValidation,
-  proofOfPaymentValidation
+  proofOfPaymentValidation,
 };

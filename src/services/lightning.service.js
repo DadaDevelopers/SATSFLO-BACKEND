@@ -10,7 +10,7 @@ const LNURL_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const PAYMENT_METHODS = {
   BOLT11: 'bolt11',
   LNURL_PAY: 'lnurl_pay',
-  LN_ADDRESS: 'ln_address'
+  LN_ADDRESS: 'ln_address',
 };
 
 function buildLightningError(message, statusCode = 400, details = null) {
@@ -144,7 +144,7 @@ function decodeBech32(input) {
 
   return {
     hrp,
-    data: data.slice(0, -6)
+    data: data.slice(0, -6),
   };
 }
 
@@ -172,7 +172,7 @@ function convertBits(data, fromBits, toBits, pad) {
     if (bits > 0) {
       result.push((value << (toBits - bits)) & maxValue);
     }
-  } else if (bits >= fromBits || ((value << (toBits - bits)) & maxValue)) {
+  } else if (bits >= fromBits || (value << (toBits - bits)) & maxValue) {
     throw buildLightningError('Invalid LNURL padding');
   }
 
@@ -220,9 +220,9 @@ async function fetchJson(url, { timeoutMs = blinkConfig.timeoutMs } = {}) {
   try {
     const response = await fetch(url, {
       headers: {
-        Accept: 'application/json'
+        Accept: 'application/json',
       },
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     const payload = await response.json().catch(() => null);
@@ -236,7 +236,11 @@ async function fetchJson(url, { timeoutMs = blinkConfig.timeoutMs } = {}) {
     }
 
     if (String(payload.status || '').toUpperCase() === 'ERROR') {
-      throw buildLightningError(payload.reason || 'Lightning target returned an error', 502, payload);
+      throw buildLightningError(
+        payload.reason || 'Lightning target returned an error',
+        502,
+        payload
+      );
     }
 
     return payload;
@@ -255,13 +259,29 @@ async function fetchJson(url, { timeoutMs = blinkConfig.timeoutMs } = {}) {
   }
 }
 
-function mapResolutionResult({ paymentMethod, target, resolvedUrl, response, callback, lightningAddress = null }) {
+function mapResolutionResult({
+  paymentMethod,
+  target,
+  resolvedUrl,
+  response,
+  callback,
+  lightningAddress = null,
+}) {
   const minSendableMsat = Number(response.minSendable || 0);
   const maxSendableMsat = Number(response.maxSendable || 0);
   const commentAllowed = Number(response.commentAllowed || 0);
 
-  if (!Number.isFinite(minSendableMsat) || !Number.isFinite(maxSendableMsat) || minSendableMsat <= 0 || maxSendableMsat < minSendableMsat) {
-    throw buildLightningError('Lightning target returned invalid min/max sendable values', 502, response);
+  if (
+    !Number.isFinite(minSendableMsat) ||
+    !Number.isFinite(maxSendableMsat) ||
+    minSendableMsat <= 0 ||
+    maxSendableMsat < minSendableMsat
+  ) {
+    throw buildLightningError(
+      'Lightning target returned invalid min/max sendable values',
+      502,
+      response
+    );
   }
 
   return {
@@ -281,7 +301,7 @@ function mapResolutionResult({ paymentMethod, target, resolvedUrl, response, cal
     allowsNostr: Boolean(response.allowsNostr),
     nostrPubkey: response.nostrPubkey || null,
     tag: response.tag,
-    raw: response
+    raw: response,
   };
 }
 
@@ -303,7 +323,9 @@ async function requestLnurlInvoice(resolution, { amountSats, comment }) {
     }
 
     if (comment.length > resolution.commentAllowed) {
-      throw buildLightningError(`comment exceeds the allowed limit of ${resolution.commentAllowed} characters`);
+      throw buildLightningError(
+        `comment exceeds the allowed limit of ${resolution.commentAllowed} characters`
+      );
     }
   }
 
@@ -327,7 +349,7 @@ async function requestLnurlInvoice(resolution, { amountSats, comment }) {
     disposable: Boolean(response.disposable),
     successAction: response.successAction || null,
     verifyUrl: response.verify || null,
-    raw: response
+    raw: response,
   };
 }
 
@@ -343,7 +365,7 @@ async function createOutgoingPaymentRecord({
   lightningAddress = null,
   destination = null,
   metadata = {},
-  settledAt = null
+  settledAt = null,
 }) {
   const result = await pool.query(
     `INSERT INTO ${TRANSACTION_TABLE}
@@ -363,7 +385,7 @@ async function createOutgoingPaymentRecord({
       lightningAddress,
       destination,
       metadata,
-      settledAt
+      settledAt,
     ]
   );
 
@@ -371,21 +393,24 @@ async function createOutgoingPaymentRecord({
 }
 
 class LightningService {
-  async submitResolvedInvoicePayment(userId, {
-    walletId,
-    paymentRequest,
-    memo,
-    amountSats = null,
-    paymentMethod,
-    lnurl = null,
-    lightningAddress = null,
-    destination = null,
-    metadata = {}
-  }) {
+  async submitResolvedInvoicePayment(
+    userId,
+    {
+      walletId,
+      paymentRequest,
+      memo,
+      amountSats = null,
+      paymentMethod,
+      lnurl = null,
+      lightningAddress = null,
+      destination = null,
+      metadata = {},
+    }
+  ) {
     const { localWallet, providerWallet } = await this.syncWallet(userId, walletId);
     const payment = await blinkService.payInvoice({
       walletId: providerWallet.id,
-      paymentRequest
+      paymentRequest,
     });
     const status = normalizeStatus(payment?.status);
 
@@ -402,15 +427,15 @@ class LightningService {
       destination,
       metadata: {
         ...metadata,
-        blinkPayment: payment
+        blinkPayment: payment,
       },
-      settledAt: status === 'settled' ? new Date() : null
+      settledAt: status === 'settled' ? new Date() : null,
     });
 
     return {
       wallet: providerWallet,
       payment,
-      transaction
+      transaction,
     };
   }
 
@@ -435,13 +460,13 @@ class LightningService {
         remoteWallet.id,
         remoteWallet.walletCurrency,
         remoteWallet.balance,
-        { providerWallet: remoteWallet }
+        { providerWallet: remoteWallet },
       ]
     );
 
     return {
       localWallet: result.rows[0],
-      providerWallet: remoteWallet
+      providerWallet: remoteWallet,
     };
   }
 
@@ -454,7 +479,7 @@ class LightningService {
     const invoice = await blinkService.createInvoice({
       walletId: providerWallet.id,
       amountSats,
-      memo
+      memo,
     });
 
     const result = await pool.query(
@@ -471,14 +496,14 @@ class LightningService {
         PAYMENT_METHODS.BOLT11,
         invoice?.paymentRequest || null,
         invoice?.paymentHash || null,
-        { blinkInvoice: invoice }
+        { blinkInvoice: invoice },
       ]
     );
 
     return {
       wallet: providerWallet,
       invoice,
-      transaction: result.rows[0]
+      transaction: result.rows[0],
     };
   }
 
@@ -486,13 +511,13 @@ class LightningService {
     const { providerWallet } = await this.syncWallet(userId, walletId);
     const probe = await blinkService.probeInvoiceFee({
       walletId: providerWallet.id,
-      paymentRequest
+      paymentRequest,
     });
 
     return {
       wallet: providerWallet,
       paymentRequest,
-      feeSats: probe.amountSats
+      feeSats: probe.amountSats,
     };
   }
 
@@ -505,9 +530,9 @@ class LightningService {
       destination: paymentRequest,
       metadata: {
         paymentInput: {
-          paymentRequest
-        }
-      }
+          paymentRequest,
+        },
+      },
     });
   }
 
@@ -530,7 +555,7 @@ class LightningService {
       target: lnurl,
       resolvedUrl,
       response,
-      callback
+      callback,
     });
   }
 
@@ -546,11 +571,19 @@ class LightningService {
     const response = await fetchJson(resolvedUrl);
 
     if (String(response.tag || '').toLowerCase() !== 'payrequest') {
-      throw buildLightningError('Lightning Address did not resolve to an LNURL-pay target', 400, response);
+      throw buildLightningError(
+        'Lightning Address did not resolve to an LNURL-pay target',
+        400,
+        response
+      );
     }
 
     if (!response.callback) {
-      throw buildLightningError('Lightning Address target is missing a callback URL', 502, response);
+      throw buildLightningError(
+        'Lightning Address target is missing a callback URL',
+        502,
+        response
+      );
     }
 
     const callback = normalizeRemoteUrl(response.callback, 'Lightning Address callback').toString();
@@ -561,11 +594,14 @@ class LightningService {
       lightningAddress: normalizedAddress,
       resolvedUrl,
       response,
-      callback
+      callback,
     });
   }
 
-  async previewPayment(userId, { paymentMethod, paymentRequest, lnurl, lightningAddress, amountSats, walletId, comment }) {
+  async previewPayment(
+    userId,
+    { paymentMethod, paymentRequest, lnurl, lightningAddress, amountSats, walletId, comment }
+  ) {
     switch (paymentMethod) {
       case PAYMENT_METHODS.BOLT11: {
         const probe = await this.probePayment(userId, { paymentRequest, walletId });
@@ -573,7 +609,7 @@ class LightningService {
           paymentMethod,
           paymentRequest,
           wallet: probe.wallet,
-          feeSats: probe.feeSats
+          feeSats: probe.feeSats,
         };
       }
 
@@ -581,7 +617,7 @@ class LightningService {
         const resolution = await this.resolveLnurl(lnurl);
         const preview = {
           paymentMethod,
-          resolution
+          resolution,
         };
 
         if (Number.isSafeInteger(amountSats) && amountSats > 0) {
@@ -589,7 +625,10 @@ class LightningService {
           preview.invoice = invoice;
 
           if (blinkConfig.apiKey) {
-            const probe = await this.probePayment(userId, { paymentRequest: invoice.paymentRequest, walletId });
+            const probe = await this.probePayment(userId, {
+              paymentRequest: invoice.paymentRequest,
+              walletId,
+            });
             preview.wallet = probe.wallet;
             preview.feeSats = probe.feeSats;
           }
@@ -602,7 +641,7 @@ class LightningService {
         const resolution = await this.resolveLightningAddress(lightningAddress);
         const preview = {
           paymentMethod,
-          resolution
+          resolution,
         };
 
         if (Number.isSafeInteger(amountSats) && amountSats > 0) {
@@ -610,7 +649,10 @@ class LightningService {
           preview.invoice = invoice;
 
           if (blinkConfig.apiKey) {
-            const probe = await this.probePayment(userId, { paymentRequest: invoice.paymentRequest, walletId });
+            const probe = await this.probePayment(userId, {
+              paymentRequest: invoice.paymentRequest,
+              walletId,
+            });
             preview.wallet = probe.wallet;
             preview.feeSats = probe.feeSats;
           }
@@ -620,9 +662,10 @@ class LightningService {
       }
 
       default:
-        throw buildLightningError('Unsupported paymentMethod. Use bolt11, lnurl_pay, or ln_address.');
+        throw buildLightningError(
+          'Unsupported paymentMethod. Use bolt11, lnurl_pay, or ln_address.'
+        );
     }
-
   }
 
   async payLnurl(userId, { lnurl, amountSats, walletId, memo }) {
@@ -642,16 +685,17 @@ class LightningService {
         lnurlInvoice: invoice,
         paymentInput: {
           lnurl,
-          amountSats
-        }
-      }
+          amountSats,
+        },
+      },
     });
   }
 
   async payLightningAddress(userId, { lightningAddress, amountSats, walletId, memo }) {
     const resolution = await this.resolveLightningAddress(lightningAddress);
     const invoice = await requestLnurlInvoice(resolution, { amountSats });
-    const normalizedAddress = resolution.lightningAddress || normalizeLightningAddress(lightningAddress);
+    const normalizedAddress =
+      resolution.lightningAddress || normalizeLightningAddress(lightningAddress);
 
     return this.submitResolvedInvoicePayment(userId, {
       walletId,
@@ -666,9 +710,9 @@ class LightningService {
         lnurlInvoice: invoice,
         paymentInput: {
           lightningAddress: normalizedAddress,
-          amountSats
-        }
-      }
+          amountSats,
+        },
+      },
     });
   }
 
@@ -685,14 +729,14 @@ class LightningService {
          ORDER BY t.created_at DESC
          LIMIT $2 OFFSET $3`,
         [userId, limit, offset]
-      )
+      ),
     ]);
 
     return {
       transactions: rowsResult.rows,
       total: Number(countResult.rows[0].count),
       page,
-      limit
+      limit,
     };
   }
 

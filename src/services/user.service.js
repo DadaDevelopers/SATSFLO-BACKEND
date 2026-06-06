@@ -69,10 +69,7 @@ class UserService {
    * Get health profile (with decrypted sensitive fields)
    */
   async getHealthProfile(userId) {
-    const result = await pool.query(
-      'SELECT * FROM health_profiles WHERE user_id = $1',
-      [userId]
-    );
+    const result = await pool.query('SELECT * FROM health_profiles WHERE user_id = $1', [userId]);
     const profile = result.rows[0];
 
     if (!profile) {
@@ -103,9 +100,15 @@ class UserService {
     await this.getHealthProfile(userId);
 
     const allowedFields = [
-      'average_cycle_length', 'average_period_length', 'birth_control_method',
-      'health_conditions', 'medications', 'last_period_date',
-      'is_pregnant', 'is_trying_to_conceive', 'notes'
+      'average_cycle_length',
+      'average_period_length',
+      'birth_control_method',
+      'health_conditions',
+      'medications',
+      'last_period_date',
+      'is_pregnant',
+      'is_trying_to_conceive',
+      'notes',
     ];
 
     const setClauses = [];
@@ -171,10 +174,7 @@ class UserService {
    * Returns the reminders sub-object in the exact shape the frontend expects.
    */
   async getPreferences(userId) {
-    const result = await pool.query(
-      'SELECT preferences FROM users WHERE id = $1',
-      [userId]
-    );
+    const result = await pool.query('SELECT preferences FROM users WHERE id = $1', [userId]);
     const user = result.rows[0];
 
     if (!user) {
@@ -193,10 +193,7 @@ class UserService {
    * and deep-merges into the stored JSONB.
    */
   async updatePreferences(userId, incoming) {
-    const currentPrefs = await pool.query(
-      'SELECT preferences FROM users WHERE id = $1',
-      [userId]
-    );
+    const currentPrefs = await pool.query('SELECT preferences FROM users WHERE id = $1', [userId]);
     const stored = currentPrefs.rows[0]?.preferences || {};
 
     // Merge reminders key
@@ -230,10 +227,10 @@ class UserService {
   defaultReminders() {
     return {
       periodStarts: true,
-      periodEnds:   true,
-      fertility:    false,
-      ovulation:    false,
-      medicine:     false,
+      periodEnds: true,
+      fertility: false,
+      ovulation: false,
+      medicine: false,
     };
   }
 
@@ -259,7 +256,9 @@ class UserService {
       [avatarData, userId]
     );
     if (!result.rows[0]) {
-      const err = new Error('User not found'); err.statusCode = 404; throw err;
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      throw err;
     }
     return result.rows[0];
   }
@@ -268,10 +267,7 @@ class UserService {
    * Delete user account (soft delete)
    */
   async deleteAccount(userId, password) {
-    const result = await pool.query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [userId]
-    );
+    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
     const user = result.rows[0];
 
     if (!user) {
@@ -294,10 +290,7 @@ class UserService {
       [`deleted_${userId}@deleted.local`, userId]
     );
 
-    await pool.query(
-      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1',
-      [userId]
-    );
+    await pool.query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
 
     logger.info('Account deleted', { userId });
     return { message: 'Account deleted successfully' };
@@ -307,8 +300,8 @@ class UserService {
    * Export user data (GDPR compliance)
    */
   async exportUserData(userId) {
-    const [userResult, healthResult, cyclesResult, symptomsResult, moodsResult] =
-      await Promise.all([
+    const [userResult, healthResult, cyclesResult, symptomsResult, moodsResult] = await Promise.all(
+      [
         pool.query(
           'SELECT id, email, name, date_of_birth, timezone, language, created_at FROM users WHERE id = $1',
           [userId]
@@ -316,18 +309,17 @@ class UserService {
         pool.query('SELECT * FROM health_profiles WHERE user_id = $1', [userId]),
         pool.query('SELECT * FROM cycles WHERE user_id = $1 ORDER BY start_date DESC', [userId]),
         pool.query('SELECT * FROM symptoms WHERE user_id = $1 ORDER BY date DESC', [userId]),
-        pool.query('SELECT * FROM moods WHERE user_id = $1 ORDER BY date DESC', [userId])
-      ]);
+        pool.query('SELECT * FROM moods WHERE user_id = $1 ORDER BY date DESC', [userId]),
+      ]
+    );
 
     return {
       exportDate: new Date().toISOString(),
       user: userResult.rows[0],
-      healthProfile: healthResult.rows[0]
-        ? this.decryptHealthProfile(healthResult.rows[0])
-        : null,
+      healthProfile: healthResult.rows[0] ? this.decryptHealthProfile(healthResult.rows[0]) : null,
       cycles: cyclesResult.rows,
       symptoms: symptomsResult.rows,
-      moods: moodsResult.rows
+      moods: moodsResult.rows,
     };
   }
 
@@ -374,10 +366,7 @@ class UserService {
       whereClause = `WHERE (email ILIKE $1 OR name ILIKE $1)`;
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM users ${whereClause}`,
-      values
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM users ${whereClause}`, values);
 
     const dataValues = [...values, limit, offset];
     const result = await pool.query(
@@ -393,8 +382,8 @@ class UserService {
       pagination: {
         page,
         limit,
-        total: parseInt(countResult.rows[0].count)
-      }
+        total: parseInt(countResult.rows[0].count),
+      },
     };
   }
 }

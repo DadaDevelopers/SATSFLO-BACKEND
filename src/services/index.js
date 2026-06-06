@@ -15,5 +15,5 @@ module.exports = {
   userService,
   cycleService,
   healthService,
-  emailService
+  emailService,
 };

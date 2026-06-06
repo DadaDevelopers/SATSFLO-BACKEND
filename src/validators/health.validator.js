@@ -52,7 +52,7 @@ const logSymptomValidation = [
   body('timeOfDay')
     .optional()
     .isIn(['morning', 'afternoon', 'evening', 'night', 'all_day'])
-    .withMessage('Invalid time of day')
+    .withMessage('Invalid time of day'),
 ];
 
 /**
@@ -75,13 +75,9 @@ const logMultipleSymptomsValidation = [
     .isString()
     .isLength({ max: 100 }),
 
-  body('symptoms.*.severity')
-    .optional()
-    .isInt({ min: 1, max: 3 }),
+  body('symptoms.*.severity').optional().isInt({ min: 1, max: 3 }),
 
-  body('symptoms.*.category')
-    .optional()
-    .isIn(Object.values(SYMPTOM_CATEGORIES))
+  body('symptoms.*.category').optional().isIn(Object.values(SYMPTOM_CATEGORIES)),
 ];
 
 /**
@@ -125,10 +121,7 @@ const logMoodValidation = [
     .isArray({ max: 10 })
     .withMessage('Triggers must be an array with max 10 entries'),
 
-  body('triggers.*')
-    .optional()
-    .isString()
-    .isLength({ max: 100 })
+  body('triggers.*').optional().isString().isLength({ max: 100 }),
 ];
 
 /**
@@ -150,67 +143,44 @@ const logMultipleMoodsValidation = [
     .withMessage('Each mood entry must have a mood type')
     .isIn(Object.values(MOOD_TYPES)),
 
-  body('moods.*.intensity')
-    .optional()
-    .isInt({ min: 1, max: 5 })
+  body('moods.*.intensity').optional().isInt({ min: 1, max: 5 }),
 ];
 
 /**
  * Get symptoms/moods validation (pagination & filters)
  */
 const getHealthLogsValidation = [
-  query('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer'),
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
 
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit must be between 1 and 100'),
 
-  query('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Start date must be a valid ISO 8601 date'),
+  query('startDate').optional().isISO8601().withMessage('Start date must be a valid ISO 8601 date'),
 
-  query('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('End date must be a valid ISO 8601 date'),
+  query('endDate').optional().isISO8601().withMessage('End date must be a valid ISO 8601 date'),
 
   query('category')
     .optional()
     .isIn(Object.values(SYMPTOM_CATEGORIES))
     .withMessage('Invalid symptom category'),
 
-  query('symptom')
-    .optional()
-    .isString()
-    .isLength({ max: 100 }),
+  query('symptom').optional().isString().isLength({ max: 100 }),
 
-  query('mood')
-    .optional()
-    .isIn(Object.values(MOOD_TYPES))
-    .withMessage('Invalid mood type')
+  query('mood').optional().isIn(Object.values(MOOD_TYPES)).withMessage('Invalid mood type'),
 ];
 
 /**
  * Symptom/Mood ID parameter validation
  */
-const healthLogIdParamValidation = [
-  param('id')
-    .isUUID()
-    .withMessage('Invalid ID format')
-];
+const healthLogIdParamValidation = [param('id').isUUID().withMessage('Invalid ID format')];
 
 /**
  * Update symptom validation
  */
 const updateSymptomValidation = [
-  param('id')
-    .isUUID()
-    .withMessage('Invalid symptom ID format'),
+  param('id').isUUID().withMessage('Invalid symptom ID format'),
 
   body('severity')
     .optional()
@@ -221,16 +191,14 @@ const updateSymptomValidation = [
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters')
+    .withMessage('Notes must not exceed 500 characters'),
 ];
 
 /**
  * Update mood validation
  */
 const updateMoodValidation = [
-  param('id')
-    .isUUID()
-    .withMessage('Invalid mood ID format'),
+  param('id').isUUID().withMessage('Invalid mood ID format'),
 
   body('intensity')
     .optional()
@@ -241,7 +209,7 @@ const updateMoodValidation = [
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters')
+    .withMessage('Notes must not exceed 500 characters'),
 ];
 
 /**
@@ -264,7 +232,7 @@ const dateRangeValidation = [
         throw new Error('End date must be after start date');
       }
       return true;
-    })
+    }),
 ];
 
 module.exports = {
@@ -276,5 +244,5 @@ module.exports = {
   healthLogIdParamValidation,
   updateSymptomValidation,
   updateMoodValidation,
-  dateRangeValidation
+  dateRangeValidation,
 };

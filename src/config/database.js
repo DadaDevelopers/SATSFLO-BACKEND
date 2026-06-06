@@ -25,7 +25,7 @@ const dbConfig = {
     REWARDS: 'rewards',
     MESSAGES: 'messages',
     FORUMS: 'forums',
-    FORUM_POSTS: 'forum_posts'
+    FORUM_POSTS: 'forum_posts',
   },
 
   errors: {
@@ -33,8 +33,8 @@ const dbConfig = {
     FOREIGN_KEY_VIOLATION: '23503',
     NOT_NULL_VIOLATION: '23502',
     CHECK_VIOLATION: '23514',
-    UNIQUE_VIOLATION: '23505'
-  }
+    UNIQUE_VIOLATION: '23505',
+  },
 };
 
 module.exports = { pool, dbConfig };

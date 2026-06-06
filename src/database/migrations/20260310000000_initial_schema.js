@@ -34,7 +34,6 @@ exports.shorthands = undefined;
 // ─── UP ───────────────────────────────────────────────────────────────────────
 
 exports.up = async (pgm) => {
-
   // Extensions
   pgm.sql(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
 
@@ -81,7 +80,9 @@ exports.up = async (pgm) => {
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user    ON refresh_tokens (user_id)`);
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token   ON refresh_tokens (token)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_active  ON refresh_tokens (user_id, revoked) WHERE revoked = FALSE`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_active  ON refresh_tokens (user_id, revoked) WHERE revoked = FALSE`
+  );
 
   // ── 3. PASSWORD RESETS ──────────────────────────────────────────────────────
   pgm.sql(`
@@ -136,8 +137,12 @@ exports.up = async (pgm) => {
   `);
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycles_user         ON cycles (user_id)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycles_user_start   ON cycles (user_id, start_date DESC)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycles_active       ON cycles (user_id, end_date) WHERE end_date IS NULL`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_cycles_user_start   ON cycles (user_id, start_date DESC)`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_cycles_active       ON cycles (user_id, end_date) WHERE end_date IS NULL`
+  );
 
   // ── 6. CYCLE LOGS ───────────────────────────────────────────────────────────
   pgm.sql(`
@@ -160,7 +165,9 @@ exports.up = async (pgm) => {
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycle_logs_user       ON cycle_logs (user_id)`);
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycle_logs_cycle      ON cycle_logs (cycle_id)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_cycle_logs_user_date  ON cycle_logs (user_id, date DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_cycle_logs_user_date  ON cycle_logs (user_id, date DESC)`
+  );
 
   // ── 7. CYCLE PROFILES (simplified widget) ───────────────────────────────────
   pgm.sql(`
@@ -241,7 +248,9 @@ exports.up = async (pgm) => {
   `);
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_day_logs_user       ON day_logs (user_id)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_day_logs_user_date  ON day_logs (user_id, log_date DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_day_logs_user_date  ON day_logs (user_id, log_date DESC)`
+  );
 
   // ── 11. WATER SETTINGS ──────────────────────────────────────────────────────
   pgm.sql(`
@@ -271,7 +280,9 @@ exports.up = async (pgm) => {
   `);
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_journal_user       ON journal_entries (user_id)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_journal_user_date  ON journal_entries (user_id, entry_date DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_journal_user_date  ON journal_entries (user_id, entry_date DESC)`
+  );
 
   // ── 13. THREADS ─────────────────────────────────────────────────────────────
   pgm.sql(`
@@ -331,8 +342,12 @@ exports.up = async (pgm) => {
   `);
 
   pgm.sql(`CREATE INDEX IF NOT EXISTS idx_notifications_user        ON notifications (user_id)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications (user_id, is_read) WHERE is_read = FALSE`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_notifications_created     ON notifications (created_at DESC)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications (user_id, is_read) WHERE is_read = FALSE`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_notifications_created     ON notifications (created_at DESC)`
+  );
 
   // ── 17. GIFT TRANSACTIONS (Lightning — reserved for Isabellah) ─────────────
   pgm.sql(`
@@ -381,9 +396,18 @@ exports.up = async (pgm) => {
 
   // Apply updated_at trigger to all relevant tables
   const updatedAtTables = [
-    'users', 'health_profiles', 'cycles', 'cycle_logs',
-    'cycle_profiles', 'symptoms', 'moods', 'day_logs',
-    'water_settings', 'journal_entries', 'threads', 'thread_comments'
+    'users',
+    'health_profiles',
+    'cycles',
+    'cycle_logs',
+    'cycle_profiles',
+    'symptoms',
+    'moods',
+    'day_logs',
+    'water_settings',
+    'journal_entries',
+    'threads',
+    'thread_comments',
   ];
 
   for (const table of updatedAtTables) {
@@ -449,9 +473,18 @@ exports.down = async (pgm) => {
   pgm.sql(`DROP TRIGGER IF EXISTS trg_notify_comment ON thread_comments`);
 
   const updatedAtTables = [
-    'thread_comments', 'threads', 'journal_entries', 'water_settings',
-    'day_logs', 'moods', 'symptoms', 'cycle_logs', 'cycle_profiles',
-    'cycles', 'health_profiles', 'users'
+    'thread_comments',
+    'threads',
+    'journal_entries',
+    'water_settings',
+    'day_logs',
+    'moods',
+    'symptoms',
+    'cycle_logs',
+    'cycle_profiles',
+    'cycles',
+    'health_profiles',
+    'users',
   ];
   for (const table of updatedAtTables) {
     pgm.sql(`DROP TRIGGER IF EXISTS set_${table}_updated_at ON ${table}`);

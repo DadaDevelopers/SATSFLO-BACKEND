@@ -8,7 +8,7 @@ const path = require('path');
 
 require('dotenv').config({
   path: path.resolve(__dirname, '../../.env'),
-  quiet: true
+  quiet: true,
 });
 
 module.exports = {
@@ -19,6 +19,6 @@ module.exports = {
 
   options: {
     issuer: 'satsflow-api',
-    audience: 'satsflow-mobile-app'
-  }
+    audience: 'satsflow-mobile-app',
+  },
 };

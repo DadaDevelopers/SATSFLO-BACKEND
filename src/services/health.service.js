@@ -24,11 +24,13 @@ class HealthService {
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
        RETURNING *`,
       [
-        userId, date, symptom,
+        userId,
+        date,
+        symptom,
         category || SYMPTOM_CATEGORIES.PHYSICAL,
         severity || 2,
         timeOfDay,
-        notes ? Encryption.encrypt(notes) : null
+        notes ? Encryption.encrypt(notes) : null,
       ]
     );
 
@@ -41,24 +43,26 @@ class HealthService {
    */
   async logMultipleSymptoms(userId, date, symptoms) {
     const results = await Promise.all(
-      symptoms.map(s =>
+      symptoms.map((s) =>
         pool.query(
           `INSERT INTO symptoms
              (user_id, date, symptom, category, severity, time_of_day, notes, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
            RETURNING *`,
           [
-            userId, date, s.symptom,
+            userId,
+            date,
+            s.symptom,
             s.category || SYMPTOM_CATEGORIES.PHYSICAL,
             s.severity || 2,
             s.timeOfDay,
-            s.notes ? Encryption.encrypt(s.notes) : null
+            s.notes ? Encryption.encrypt(s.notes) : null,
           ]
         )
       )
     );
 
-    return results.map(r => this.formatSymptom(r.rows[0]));
+    return results.map((r) => this.formatSymptom(r.rows[0]));
   }
 
   /**
@@ -69,17 +73,26 @@ class HealthService {
     const conditions = ['user_id = $1'];
     const values = [userId];
 
-    if (startDate) { values.push(startDate); conditions.push(`date >= $${values.length}`); }
-    if (endDate) { values.push(endDate); conditions.push(`date <= $${values.length}`); }
-    if (category) { values.push(category); conditions.push(`category = $${values.length}`); }
-    if (symptom) { values.push(symptom); conditions.push(`symptom = $${values.length}`); }
+    if (startDate) {
+      values.push(startDate);
+      conditions.push(`date >= $${values.length}`);
+    }
+    if (endDate) {
+      values.push(endDate);
+      conditions.push(`date <= $${values.length}`);
+    }
+    if (category) {
+      values.push(category);
+      conditions.push(`category = $${values.length}`);
+    }
+    if (symptom) {
+      values.push(symptom);
+      conditions.push(`symptom = $${values.length}`);
+    }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM symptoms ${whereClause}`,
-      values
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM symptoms ${whereClause}`, values);
 
     const dataValues = [...values, limit, offset];
     const result = await pool.query(
@@ -90,8 +103,8 @@ class HealthService {
     );
 
     return {
-      symptoms: result.rows.map(s => this.formatSymptom(s)),
-      pagination: { page, limit, total: parseInt(countResult.rows[0].count) }
+      symptoms: result.rows.map((s) => this.formatSymptom(s)),
+      pagination: { page, limit, total: parseInt(countResult.rows[0].count) },
     };
   }
 
@@ -103,7 +116,7 @@ class HealthService {
       `SELECT * FROM symptoms WHERE user_id = $1 AND date = $2 ORDER BY created_at ASC`,
       [userId, date]
     );
-    return result.rows.map(s => this.formatSymptom(s));
+    return result.rows.map((s) => this.formatSymptom(s));
   }
 
   /**
@@ -142,10 +155,7 @@ class HealthService {
    * Delete a symptom
    */
   async deleteSymptom(userId, symptomId) {
-    await pool.query(
-      'DELETE FROM symptoms WHERE id = $1 AND user_id = $2',
-      [symptomId, userId]
-    );
+    await pool.query('DELETE FROM symptoms WHERE id = $1 AND user_id = $2', [symptomId, userId]);
     return { message: 'Symptom deleted successfully' };
   }
 
@@ -162,10 +172,12 @@ class HealthService {
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
        RETURNING *`,
       [
-        userId, date, mood,
+        userId,
+        date,
+        mood,
         intensity || 3,
         notes ? Encryption.encrypt(notes) : null,
-        triggers ? Encryption.encrypt(JSON.stringify(triggers)) : null
+        triggers ? Encryption.encrypt(JSON.stringify(triggers)) : null,
       ]
     );
 
@@ -178,22 +190,24 @@ class HealthService {
    */
   async logMultipleMoods(userId, date, moods) {
     const results = await Promise.all(
-      moods.map(m =>
+      moods.map((m) =>
         pool.query(
           `INSERT INTO moods (user_id, date, mood, intensity, notes, triggers, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, NOW())
            RETURNING *`,
           [
-            userId, date, m.mood,
+            userId,
+            date,
+            m.mood,
             m.intensity || 3,
             m.notes ? Encryption.encrypt(m.notes) : null,
-            m.triggers ? Encryption.encrypt(JSON.stringify(m.triggers)) : null
+            m.triggers ? Encryption.encrypt(JSON.stringify(m.triggers)) : null,
           ]
         )
       )
     );
 
-    return results.map(r => this.formatMood(r.rows[0]));
+    return results.map((r) => this.formatMood(r.rows[0]));
   }
 
   /**
@@ -204,16 +218,22 @@ class HealthService {
     const conditions = ['user_id = $1'];
     const values = [userId];
 
-    if (startDate) { values.push(startDate); conditions.push(`date >= $${values.length}`); }
-    if (endDate) { values.push(endDate); conditions.push(`date <= $${values.length}`); }
-    if (mood) { values.push(mood); conditions.push(`mood = $${values.length}`); }
+    if (startDate) {
+      values.push(startDate);
+      conditions.push(`date >= $${values.length}`);
+    }
+    if (endDate) {
+      values.push(endDate);
+      conditions.push(`date <= $${values.length}`);
+    }
+    if (mood) {
+      values.push(mood);
+      conditions.push(`mood = $${values.length}`);
+    }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM moods ${whereClause}`,
-      values
-    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM moods ${whereClause}`, values);
 
     const dataValues = [...values, limit, offset];
     const result = await pool.query(
@@ -224,8 +244,8 @@ class HealthService {
     );
 
     return {
-      moods: result.rows.map(m => this.formatMood(m)),
-      pagination: { page, limit, total: parseInt(countResult.rows[0].count) }
+      moods: result.rows.map((m) => this.formatMood(m)),
+      pagination: { page, limit, total: parseInt(countResult.rows[0].count) },
     };
   }
 
@@ -237,7 +257,7 @@ class HealthService {
       'SELECT * FROM moods WHERE user_id = $1 AND date = $2 ORDER BY created_at ASC',
       [userId, date]
     );
-    return result.rows.map(m => this.formatMood(m));
+    return result.rows.map((m) => this.formatMood(m));
   }
 
   /**
@@ -278,10 +298,7 @@ class HealthService {
    * Delete a mood
    */
   async deleteMood(userId, moodId) {
-    await pool.query(
-      'DELETE FROM moods WHERE id = $1 AND user_id = $2',
-      [moodId, userId]
-    );
+    await pool.query('DELETE FROM moods WHERE id = $1 AND user_id = $2', [moodId, userId]);
     return { message: 'Mood deleted successfully' };
   }
 
@@ -325,7 +342,7 @@ class HealthService {
       totalEntries: symptoms.length,
       topSymptoms,
       categoryBreakdown,
-      dateRange: { startDate, endDate }
+      dateRange: { startDate, endDate },
     };
   }
 
@@ -360,14 +377,14 @@ class HealthService {
         mood,
         count,
         percentage: Math.round((count / moods.length) * 100),
-        avgIntensity: avgIntensity[mood]
+        avgIntensity: avgIntensity[mood],
       }))
       .sort((a, b) => b.count - a.count);
 
     return {
       totalEntries: moods.length,
       moodDistribution,
-      dateRange: { startDate, endDate }
+      dateRange: { startDate, endDate },
     };
   }
 
@@ -377,7 +394,7 @@ class HealthService {
   async getDailySummary(userId, date) {
     const [symptoms, moods] = await Promise.all([
       this.getSymptomsByDate(userId, date),
-      this.getMoodsByDate(userId, date)
+      this.getMoodsByDate(userId, date),
     ]);
 
     return {
@@ -385,7 +402,7 @@ class HealthService {
       symptoms,
       moods,
       hasSymptomsLogged: symptoms.length > 0,
-      hasMoodsLogged: moods.length > 0
+      hasMoodsLogged: moods.length > 0,
     };
   }
 
@@ -418,7 +435,7 @@ class HealthService {
         `SELECT mood, intensity, date FROM moods
          WHERE user_id = $1 AND date >= $2 AND date <= $3`,
         [userId, cycle.start_date, endDate]
-      )
+      ),
     ]);
 
     const dailyData = {};
@@ -440,7 +457,7 @@ class HealthService {
       cycleId,
       startDate: cycle.start_date,
       endDate,
-      dailyData
+      dailyData,
     };
   }
 
@@ -455,7 +472,7 @@ class HealthService {
       severity: symptom.severity,
       timeOfDay: symptom.time_of_day,
       notes: symptom.notes ? Encryption.decrypt(symptom.notes) : null,
-      createdAt: symptom.created_at
+      createdAt: symptom.created_at,
     };
   }
 
@@ -476,7 +493,7 @@ class HealthService {
       intensity: mood.intensity,
       notes: mood.notes ? Encryption.decrypt(mood.notes) : null,
       triggers,
-      createdAt: mood.created_at
+      createdAt: mood.created_at,
     };
   }
 }

@@ -12,9 +12,15 @@ exports.up = async (pgm) => {
 
   pgm.sql(`ALTER TABLE lightning_transactions ADD COLUMN IF NOT EXISTS lnurl TEXT`);
   pgm.sql(`ALTER TABLE lightning_transactions ADD COLUMN IF NOT EXISTS lightning_address TEXT`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_payment_method ON lightning_transactions (payment_method)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_lnurl ON lightning_transactions (lnurl)`);
-  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_lightning_transactions_lightning_address ON lightning_transactions (lightning_address)`);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_payment_method ON lightning_transactions (payment_method)`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_lnurl ON lightning_transactions (lnurl)`
+  );
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS idx_lightning_transactions_lightning_address ON lightning_transactions (lightning_address)`
+  );
 };
 
 exports.down = async (pgm) => {

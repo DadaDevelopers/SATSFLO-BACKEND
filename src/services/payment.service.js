@@ -33,14 +33,13 @@ async function fetchBtcPrice() {
 // ─── Format validators ───────────────────────────────────────────────────────
 
 const LN_ADDRESS_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/;
-const LNURL_RE      = /^lnurl[a-z0-9]+$/i;
+const LNURL_RE = /^lnurl[a-z0-9]+$/i;
 
 function err(msg, code = 400) {
   return Object.assign(new Error(msg), { statusCode: code });
 }
 
 class PaymentService {
-
   // ─── Address resolution ────────────────────────────────────────────────────
 
   /**
@@ -86,7 +85,7 @@ class PaymentService {
 
     const meta = metaRes.data;
     if (meta.tag !== 'payRequest') throw err('Not a valid LNURL-pay endpoint');
-    if (!meta.callback)           throw err('LNURL-pay response missing callback');
+    if (!meta.callback) throw err('LNURL-pay response missing callback');
 
     return meta;
   }
@@ -113,7 +112,9 @@ class PaymentService {
       const parsed = JSON.parse(meta.metadata || '[]');
       const textEntry = parsed.find(([type]) => type === 'text/plain');
       if (textEntry) description = textEntry[1];
-    } catch { /* metadata may not be JSON */ }
+    } catch {
+      /* metadata may not be JSON */
+    }
 
     return {
       valid: true,
@@ -199,7 +200,11 @@ class PaymentService {
       throw err('recipient_id or lightning_address is required');
     }
 
-    const { bolt11Invoice, paymentHash } = await this.fetchInvoice(resolvedAddress, amountSats, note || '');
+    const { bolt11Invoice, paymentHash } = await this.fetchInvoice(
+      resolvedAddress,
+      amountSats,
+      note || ''
+    );
 
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -209,8 +214,17 @@ class PaymentService {
           bolt11_invoice, payment_hash, expires_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
        RETURNING id, amount_sats, status, created_at, payment_hash, expires_at, lightning_address`,
-      [senderId, resolvedRecipientId, resolvedAddress, amountSats,
-       threadId || null, note || null, bolt11Invoice, paymentHash, expiresAt]
+      [
+        senderId,
+        resolvedRecipientId,
+        resolvedAddress,
+        amountSats,
+        threadId || null,
+        note || null,
+        bolt11Invoice,
+        paymentHash,
+        expiresAt,
+      ]
     );
 
     const tx = result.rows[0];
@@ -239,10 +253,7 @@ class PaymentService {
 
     // Auto-expire if past expiry and still pending
     if (tx.status === 'pending' && new Date(tx.expires_at) < new Date()) {
-      await pool.query(
-        "UPDATE gift_transactions SET status = 'failed' WHERE id = $1",
-        [tx.id]
-      );
+      await pool.query("UPDATE gift_transactions SET status = 'failed' WHERE id = $1", [tx.id]);
       tx.status = 'failed';
     }
 
@@ -297,9 +308,9 @@ class PaymentService {
    * Uses LEFT JOIN so external-address tips (receiver_id = NULL) still appear.
    */
   async getHistory(userId, type = 'sent') {
-    const field     = type === 'received' ? 'receiver_id' : 'sender_id';
-    const joinField = type === 'received' ? 'sender_id'   : 'receiver_id';
-    const joinAlias = type === 'received' ? 'sender'      : 'recipient';
+    const field = type === 'received' ? 'receiver_id' : 'sender_id';
+    const joinField = type === 'received' ? 'sender_id' : 'receiver_id';
+    const joinAlias = type === 'received' ? 'sender' : 'recipient';
 
     const result = await pool.query(
       `SELECT
@@ -316,14 +327,14 @@ class PaymentService {
       [userId]
     );
 
-    return result.rows.map(r => ({
-      id:               r.id,
-      amount_sats:      r.amount_sats,
-      status:           r.status,
-      note:             r.note,
-      created_at:       r.created_at,
-      thread_id:        r.thread_id,
-      payment_hash:     r.payment_hash,
+    return result.rows.map((r) => ({
+      id: r.id,
+      amount_sats: r.amount_sats,
+      status: r.status,
+      note: r.note,
+      created_at: r.created_at,
+      thread_id: r.thread_id,
+      payment_hash: r.payment_hash,
       lightning_address: r.lightning_address,
       [joinAlias]: r.other_user_id
         ? { id: r.other_user_id, name: r.other_user_name, avatar_url: r.other_user_avatar }
@@ -338,9 +349,9 @@ class PaymentService {
   async getBtcPrice() {
     const { usd, updated_at } = await fetchBtcPrice();
     return {
-      btc_usd:         usd,
-      sats_per_usd:    Math.round(100_000_000 / usd),
-      updated_at:      new Date(updated_at).toISOString(),
+      btc_usd: usd,
+      sats_per_usd: Math.round(100_000_000 / usd),
+      updated_at: new Date(updated_at).toISOString(),
     };
   }
 }

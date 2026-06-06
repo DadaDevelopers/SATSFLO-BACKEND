@@ -18,7 +18,7 @@ const {
   updateCycleValidation,
   getCyclesValidation,
   cycleIdParamValidation,
-  dateParamValidation
+  dateParamValidation,
 } = require('../validators/cycle.validator');
 const { updatePeriodStart, updatePeriodEnd } = cycleController;
 
@@ -33,24 +33,14 @@ router.use(sensitiveDataLimiter);
  * @desc    Start a new period
  * @access  Private
  */
-router.post(
-  '/start',
-  startPeriodValidation,
-  validate,
-  cycleController.startPeriod
-);
+router.post('/start', startPeriodValidation, validate, cycleController.startPeriod);
 
 /**
  * @route   POST /api/v1/cycles/end
  * @desc    End current period
  * @access  Private
  */
-router.post(
-  '/end',
-  endPeriodValidation,
-  validate,
-  cycleController.endPeriod
-);
+router.post('/end', endPeriodValidation, validate, cycleController.endPeriod);
 
 /**
  * @route   PUT /api/v1/cycles/start
@@ -71,12 +61,7 @@ router.put('/end', endPeriodValidation, validate, updatePeriodEnd);
  * @desc    Log daily entry
  * @access  Private
  */
-router.post(
-  '/log',
-  logDailyEntryValidation,
-  validate,
-  cycleController.logDailyEntry
-);
+router.post('/log', logDailyEntryValidation, validate, cycleController.logDailyEntry);
 
 // ==================== CURRENT STATUS ====================
 
@@ -124,12 +109,7 @@ router.get('/analytics', cycleController.getAnalytics);
  * @desc    Get daily log for specific date
  * @access  Private
  */
-router.get(
-  '/log/:date',
-  dateParamValidation,
-  validate,
-  cycleController.getDailyLog
-);
+router.get('/log/:date', dateParamValidation, validate, cycleController.getDailyLog);
 
 // ==================== CYCLE LOGS (nested) ====================
 
@@ -153,47 +133,27 @@ router.post(
  * @desc    Get cycle history
  * @access  Private
  */
-router.get(
-  '/',
-  getCyclesValidation,
-  validate,
-  cycleController.getCycles
-);
+router.get('/', getCyclesValidation, validate, cycleController.getCycles);
 
 /**
  * @route   GET /api/v1/cycles/:cycleId
  * @desc    Get cycle by ID with daily logs
  * @access  Private
  */
-router.get(
-  '/:cycleId',
-  cycleIdParamValidation,
-  validate,
-  cycleController.getCycleById
-);
+router.get('/:cycleId', cycleIdParamValidation, validate, cycleController.getCycleById);
 
 /**
  * @route   PUT /api/v1/cycles/:cycleId
  * @desc    Update cycle
  * @access  Private
  */
-router.put(
-  '/:cycleId',
-  updateCycleValidation,
-  validate,
-  cycleController.updateCycle
-);
+router.put('/:cycleId', updateCycleValidation, validate, cycleController.updateCycle);
 
 /**
  * @route   DELETE /api/v1/cycles/:cycleId
  * @desc    Delete cycle
  * @access  Private
  */
-router.delete(
-  '/:cycleId',
-  cycleIdParamValidation,
-  validate,
-  cycleController.deleteCycle
-);
+router.delete('/:cycleId', cycleIdParamValidation, validate, cycleController.deleteCycle);
 
 module.exports = router;

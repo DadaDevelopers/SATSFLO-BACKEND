@@ -32,7 +32,7 @@ function checkOtpRateLimit(email) {
   const now = Date.now();
   const WINDOW_MS = 60 * 60 * 1000; // 1 hour
   const MAX_REQUESTS = 3;
-  const timestamps = (otpRateLimitMap.get(email) || []).filter(t => now - t < WINDOW_MS);
+  const timestamps = (otpRateLimitMap.get(email) || []).filter((t) => now - t < WINDOW_MS);
   if (timestamps.length >= MAX_REQUESTS) return false;
   timestamps.push(now);
   otpRateLimitMap.set(email, timestamps);
@@ -45,7 +45,7 @@ function checkResendRateLimit(userId) {
   const now = Date.now();
   const WINDOW_MS = 60 * 60 * 1000;
   const MAX_REQUESTS = 3;
-  const timestamps = (resendRateLimitMap.get(userId) || []).filter(t => now - t < WINDOW_MS);
+  const timestamps = (resendRateLimitMap.get(userId) || []).filter((t) => now - t < WINDOW_MS);
   if (timestamps.length >= MAX_REQUESTS) return false;
   timestamps.push(now);
   resendRateLimitMap.set(userId, timestamps);
@@ -58,10 +58,9 @@ class AuthService {
    */
   async register({ email, password, name }) {
     // Check if user exists
-    const existing = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [
+      email.toLowerCase(),
+    ]);
     if (existing.rows[0]) {
       const error = new Error('Email already registered');
       error.statusCode = 409;
@@ -95,9 +94,12 @@ class AuthService {
     const verificationUrl = `${VERIFICATION_BASE_URL}/auth/verify-email/${verificationToken}`;
 
     // Non-blocking — registration succeeds even if emails fail
-    emailService.sendVerificationEmail(user.email, user.name, verificationUrl)
+    emailService
+      .sendVerificationEmail(user.email, user.name, verificationUrl)
       .then(() => logger.info('Verification email sent', { userId: user.id }))
-      .catch(err => logger.error('Verification email failed', { error: err.message, userId: user.id }));
+      .catch((err) =>
+        logger.error('Verification email failed', { error: err.message, userId: user.id })
+      );
 
     const tokens = this.generateTokens(user);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
@@ -110,9 +112,9 @@ class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        emailVerified: false
+        emailVerified: false,
       },
-      ...tokens
+      ...tokens,
     };
   }
 
@@ -165,9 +167,9 @@ class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        emailVerified: user.email_verified
+        emailVerified: user.email_verified,
       },
-      ...tokens
+      ...tokens,
     };
   }
 
@@ -227,10 +229,10 @@ class AuthService {
    * Logout user (revoke refresh token)
    */
   async logout(userId, refreshToken) {
-    await pool.query(
-      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND token = $2',
-      [userId, refreshToken]
-    );
+    await pool.query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND token = $2', [
+      userId,
+      refreshToken,
+    ]);
     logger.info('User logged out', { userId });
   }
 
@@ -238,10 +240,7 @@ class AuthService {
    * Logout from all devices
    */
   async logoutAll(userId) {
-    await pool.query(
-      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1',
-      [userId]
-    );
+    await pool.query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
     logger.info('User logged out from all devices', { userId });
   }
 
@@ -256,31 +255,35 @@ class AuthService {
     );
     const user = result.rows[0];
     if (!user) {
-      const err = new Error('Invalid OTP'); err.statusCode = 400; throw err;
+      const err = new Error('Invalid OTP');
+      err.statusCode = 400;
+      throw err;
     }
 
     if (!user.email_otp || user.email_otp !== String(otp)) {
-      const err = new Error('Invalid OTP'); err.statusCode = 400; throw err;
+      const err = new Error('Invalid OTP');
+      err.statusCode = 400;
+      throw err;
     }
 
     if (new Date(user.email_otp_expires) < new Date()) {
-      const err = new Error('OTP has expired. Please request a new one.'); err.statusCode = 400; throw err;
+      const err = new Error('OTP has expired. Please request a new one.');
+      err.statusCode = 400;
+      throw err;
     }
 
     // Clear OTP and issue a short-lived reset token
-    await pool.query(
-      'UPDATE users SET email_otp = NULL, email_otp_expires = NULL WHERE id = $1',
-      [user.id]
-    );
+    await pool.query('UPDATE users SET email_otp = NULL, email_otp_expires = NULL WHERE id = $1', [
+      user.id,
+    ]);
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetExpires = new Date(Date.now() + 15 * 60 * 1000);
 
     // Invalidate previous reset tokens then store new one
-    await pool.query(
-      'UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false',
-      [user.id]
-    );
+    await pool.query('UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false', [
+      user.id,
+    ]);
     await pool.query(
       'INSERT INTO password_resets (user_id, token, expires_at, created_at) VALUES ($1, $2, $3, NOW())',
       [user.id, resetToken, resetExpires]
@@ -316,10 +319,11 @@ class AuthService {
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-    await pool.query(
-      'UPDATE users SET email_otp = $1, email_otp_expires = $2 WHERE id = $3',
-      [otp, otpExpires, user.id]
-    );
+    await pool.query('UPDATE users SET email_otp = $1, email_otp_expires = $2 WHERE id = $3', [
+      otp,
+      otpExpires,
+      user.id,
+    ]);
 
     try {
       await emailService.sendPasswordResetEmail(user.email, user.name, otp);
@@ -369,8 +373,10 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2',
-      [passwordHash, resetRecord.user_id]);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      passwordHash,
+      resetRecord.user_id,
+    ]);
 
     await pool.query('UPDATE password_resets SET used = true WHERE token = $1', [token]);
 
@@ -433,9 +439,12 @@ class AuthService {
 
     // Send welcome email on first verification only
     if (!user.email_verified) {
-      emailService.sendWelcomeEmail(user.email, user.name)
+      emailService
+        .sendWelcomeEmail(user.email, user.name)
         .then(() => logger.info('Welcome email sent', { userId: user.id }))
-        .catch(err => logger.error('Welcome email failed', { error: err.message, userId: user.id }));
+        .catch((err) =>
+          logger.error('Welcome email failed', { error: err.message, userId: user.id })
+        );
     }
 
     return { alreadyVerified: user.email_verified };
@@ -486,12 +495,12 @@ class AuthService {
     const payload = {
       userId: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
     };
 
     const accessToken = jwt.sign(payload, jwtConfig.secret, {
       expiresIn: jwtConfig.expiresIn,
-      ...jwtConfig.options
+      ...jwtConfig.options,
     });
 
     const refreshToken = jwt.sign(

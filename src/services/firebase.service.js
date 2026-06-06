@@ -8,9 +8,9 @@ let initialized = false;
 function initialize() {
   if (initialized) return;
 
-  const projectId   = process.env.FIREBASE_PROJECT_ID;
+  const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey  = process.env.FIREBASE_PRIVATE_KEY;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!projectId || !clientEmail || !privateKey) {
     logger.warn('Firebase env vars not set — push notifications disabled');
@@ -38,9 +38,7 @@ async function sendPush(token, title, body, data = {}) {
   const message = {
     token,
     notification: { title, body },
-    data: Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [k, String(v)])
-    ),
+    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
   };
 
   try {

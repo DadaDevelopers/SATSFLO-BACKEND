@@ -95,10 +95,12 @@ const updatePreferences = async (req, res, next) => {
 const uploadAvatar = async (req, res, next) => {
   try {
     if (!req.file) {
-      return ApiResponse.validationError(res, [{
-        field: 'file',
-        message: 'Provide an image file (multipart/form-data with field "file")',
-      }]);
+      return ApiResponse.validationError(res, [
+        {
+          field: 'file',
+          message: 'Provide an image file (multipart/form-data with field "file")',
+        },
+      ]);
     }
 
     const uploaded = await uploadBuffer(req.file.buffer, {
@@ -152,7 +154,9 @@ const saveDeviceToken = async (req, res, next) => {
       return ApiResponse.validationError(res, [{ field: 'token', message: 'token is required' }]);
     }
     if (!platform || !['ios', 'android'].includes(platform)) {
-      return ApiResponse.validationError(res, [{ field: 'platform', message: 'platform must be ios or android' }]);
+      return ApiResponse.validationError(res, [
+        { field: 'platform', message: 'platform must be ios or android' },
+      ]);
     }
     await userService.saveDeviceToken(req.user.id, token.trim(), platform);
     return ApiResponse.success(res, null, 'Device token saved');
@@ -186,7 +190,7 @@ const searchUsers = async (req, res, next) => {
     const result = await userService.searchUsers({
       query: q,
       page: parseInt(page) || 1,
-      limit: parseInt(limit) || 20
+      limit: parseInt(limit) || 20,
     });
     return ApiResponse.paginated(res, result.users, result.pagination);
   } catch (error) {
@@ -206,5 +210,5 @@ module.exports = {
   deleteAccount,
   exportData,
   getUserById,
-  searchUsers
+  searchUsers,
 };

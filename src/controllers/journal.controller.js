@@ -5,16 +5,25 @@ const ApiResponse = require('../utils/response');
 const { uploadBuffer } = require('../config/cloudinary');
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Valid mood values (matches the add-log / journal mood screens)
 const VALID_MOODS = [
-  'normal', 'happy', 'sad', 'calm', 'hyped', 'inlove', 'in_love',
-  'peaceful', 'angry', 'lonely', 'silly', 'relaxed',
+  'normal',
+  'happy',
+  'sad',
+  'calm',
+  'hyped',
+  'inlove',
+  'in_love',
+  'peaceful',
+  'angry',
+  'lonely',
+  'silly',
+  'relaxed',
 ];
 
 const journalController = {
-
   // GET /journal?month=YYYY-MM
   async getByMonth(req, res) {
     try {
@@ -76,25 +85,32 @@ const journalController = {
 
       if (mood && !VALID_MOODS.includes(mood)) {
         return ApiResponse.validationError(res, [
-          { field: 'mood', message: `mood must be one of: ${VALID_MOODS.filter(m => !m.includes('_')).join(', ')}` },
+          {
+            field: 'mood',
+            message: `mood must be one of: ${VALID_MOODS.filter((m) => !m.includes('_')).join(', ')}`,
+          },
         ]);
       }
 
       if (symptoms !== undefined && !Array.isArray(symptoms)) {
-        return ApiResponse.validationError(res, [{ field: 'symptoms', message: 'symptoms must be an array' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'symptoms', message: 'symptoms must be an array' },
+        ]);
       }
 
       if (images !== undefined && !Array.isArray(images)) {
-        return ApiResponse.validationError(res, [{ field: 'images', message: 'images must be an array' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'images', message: 'images must be an array' },
+        ]);
       }
 
       const entry = await journalService.create(req.user.id, {
         entry_date,
-        title:    title    ?? null,
-        content:  content  ?? '',
-        mood:     mood     ?? null,
+        title: title ?? null,
+        content: content ?? '',
+        mood: mood ?? null,
         symptoms: symptoms ?? [],
-        images:   images   ?? [],
+        images: images ?? [],
       });
 
       return ApiResponse.created(res, entry, 'Journal entry created');
@@ -111,24 +127,31 @@ const journalController = {
 
       if (mood && !VALID_MOODS.includes(mood)) {
         return ApiResponse.validationError(res, [
-          { field: 'mood', message: `mood must be one of: ${VALID_MOODS.filter(m => !m.includes('_')).join(', ')}` },
+          {
+            field: 'mood',
+            message: `mood must be one of: ${VALID_MOODS.filter((m) => !m.includes('_')).join(', ')}`,
+          },
         ]);
       }
 
       if (symptoms !== undefined && !Array.isArray(symptoms)) {
-        return ApiResponse.validationError(res, [{ field: 'symptoms', message: 'symptoms must be an array' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'symptoms', message: 'symptoms must be an array' },
+        ]);
       }
 
       if (images !== undefined && !Array.isArray(images)) {
-        return ApiResponse.validationError(res, [{ field: 'images', message: 'images must be an array' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'images', message: 'images must be an array' },
+        ]);
       }
 
       const updates = {};
-      if (title      !== undefined) updates.title      = title;
-      if (content    !== undefined) updates.content    = content;
-      if (mood       !== undefined) updates.mood       = mood;
-      if (symptoms   !== undefined) updates.symptoms   = symptoms;
-      if (images     !== undefined) updates.images     = images;
+      if (title !== undefined) updates.title = title;
+      if (content !== undefined) updates.content = content;
+      if (mood !== undefined) updates.mood = mood;
+      if (symptoms !== undefined) updates.symptoms = symptoms;
+      if (images !== undefined) updates.images = images;
       if (entry_date !== undefined) updates.entry_date = entry_date;
 
       if (Object.keys(updates).length === 0) {
@@ -174,13 +197,15 @@ const journalController = {
       }
 
       const results = await Promise.all(
-        req.files.map(file => uploadBuffer(file.buffer, {
-          folder: 'satsflo/journal',
-          transformation: [{ width: 1080, quality: 'auto' }],
-          allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-        }))
+        req.files.map((file) =>
+          uploadBuffer(file.buffer, {
+            folder: 'satsflo/journal',
+            transformation: [{ width: 1080, quality: 'auto' }],
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+          })
+        )
       );
-      const urls = results.map(r => r.secure_url);
+      const urls = results.map((r) => r.secure_url);
 
       return ApiResponse.success(res, { urls }, 'Media uploaded');
     } catch (err) {

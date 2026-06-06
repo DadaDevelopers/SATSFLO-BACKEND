@@ -26,7 +26,7 @@ const authenticateToken = async (req, res, next) => {
       if (err) {
         logger.warn('Token verification failed', {
           error: err.message,
-          ip: req.ip
+          ip: req.ip,
         });
 
         if (err.name === 'TokenExpiredError') {
@@ -39,7 +39,7 @@ const authenticateToken = async (req, res, next) => {
       req.user = {
         id: decoded.userId,
         email: decoded.email,
-        role: decoded.role
+        role: decoded.role,
       };
 
       next();
@@ -64,7 +64,7 @@ const authorize = (...roles) => {
       logger.warn('Authorization failed', {
         userId: req.user.id,
         requiredRoles: roles,
-        userRole: req.user.role
+        userRole: req.user.role,
       });
       return ApiResponse.forbidden(res, 'Insufficient permissions');
     }
@@ -90,7 +90,7 @@ const optionalAuth = (req, res, next) => {
       req.user = {
         id: decoded.userId,
         email: decoded.email,
-        role: decoded.role
+        role: decoded.role,
       };
     }
     next();
@@ -126,5 +126,5 @@ module.exports = {
   authenticateToken,
   authorize,
   optionalAuth,
-  verifyOwnership
+  verifyOwnership,
 };

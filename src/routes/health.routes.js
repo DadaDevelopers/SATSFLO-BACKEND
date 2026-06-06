@@ -20,14 +20,10 @@ const {
   healthLogIdParamValidation,
   updateSymptomValidation,
   updateMoodValidation,
-  dateRangeValidation
+  dateRangeValidation,
 } = require('../validators/health.validator');
-const {
-  logFlow,
-  logMedicine,
-  logWeight, getWeightHistory,
-  logTemperature, getTemperatureHistory,
-} = healthController;
+const { logFlow, logMedicine, logWeight, getWeightHistory, logTemperature, getTemperatureHistory } =
+  healthController;
 const { dateParamValidation } = require('../validators/cycle.validator');
 
 // All routes require authentication
@@ -41,12 +37,7 @@ router.use(sensitiveDataLimiter);
  * @desc    Log a symptom
  * @access  Private
  */
-router.post(
-  '/symptoms',
-  logSymptomValidation,
-  validate,
-  healthController.logSymptom
-);
+router.post('/symptoms', logSymptomValidation, validate, healthController.logSymptom);
 
 /**
  * @route   POST /api/v1/health/symptoms/batch
@@ -65,12 +56,7 @@ router.post(
  * @desc    Get symptoms with filters
  * @access  Private
  */
-router.get(
-  '/symptoms',
-  getHealthLogsValidation,
-  validate,
-  healthController.getSymptoms
-);
+router.get('/symptoms', getHealthLogsValidation, validate, healthController.getSymptoms);
 
 /**
  * @route   GET /api/v1/health/symptoms/date/:date
@@ -89,12 +75,7 @@ router.get(
  * @desc    Update a symptom
  * @access  Private
  */
-router.put(
-  '/symptoms/:id',
-  updateSymptomValidation,
-  validate,
-  healthController.updateSymptom
-);
+router.put('/symptoms/:id', updateSymptomValidation, validate, healthController.updateSymptom);
 
 /**
  * @route   DELETE /api/v1/health/symptoms/:id
@@ -115,12 +96,7 @@ router.delete(
  * @desc    Log a mood
  * @access  Private
  */
-router.post(
-  '/moods',
-  logMoodValidation,
-  validate,
-  healthController.logMood
-);
+router.post('/moods', logMoodValidation, validate, healthController.logMood);
 
 /**
  * @route   POST /api/v1/health/moods/batch
@@ -139,48 +115,28 @@ router.post(
  * @desc    Get moods with filters
  * @access  Private
  */
-router.get(
-  '/moods',
-  getHealthLogsValidation,
-  validate,
-  healthController.getMoods
-);
+router.get('/moods', getHealthLogsValidation, validate, healthController.getMoods);
 
 /**
  * @route   GET /api/v1/health/moods/date/:date
  * @desc    Get moods for a specific date
  * @access  Private
  */
-router.get(
-  '/moods/date/:date',
-  dateParamValidation,
-  validate,
-  healthController.getMoodsByDate
-);
+router.get('/moods/date/:date', dateParamValidation, validate, healthController.getMoodsByDate);
 
 /**
  * @route   PUT /api/v1/health/moods/:id
  * @desc    Update a mood
  * @access  Private
  */
-router.put(
-  '/moods/:id',
-  updateMoodValidation,
-  validate,
-  healthController.updateMood
-);
+router.put('/moods/:id', updateMoodValidation, validate, healthController.updateMood);
 
 /**
  * @route   DELETE /api/v1/health/moods/:id
  * @desc    Delete a mood
  * @access  Private
  */
-router.delete(
-  '/moods/:id',
-  healthLogIdParamValidation,
-  validate,
-  healthController.deleteMood
-);
+router.delete('/moods/:id', healthLogIdParamValidation, validate, healthController.deleteMood);
 
 // ==================== FLOW ====================
 
@@ -239,12 +195,7 @@ router.get('/analytics/moods', healthController.getMoodAnalytics);
  * @desc    Get daily health summary
  * @access  Private
  */
-router.get(
-  '/summary/:date',
-  dateParamValidation,
-  validate,
-  healthController.getDailySummary
-);
+router.get('/summary/:date', dateParamValidation, validate, healthController.getDailySummary);
 
 /**
  * @route   GET /api/v1/health/trends/:cycleId

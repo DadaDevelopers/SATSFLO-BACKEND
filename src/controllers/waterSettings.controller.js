@@ -7,10 +7,14 @@ const waterSettingsController = {
   async get(req, res) {
     try {
       const settings = await waterSettingsService.get(req.user.id);
-      return ApiResponse.success(res, {
-        ...settings,
-        daily_goal_ml: settings?.water_target ?? null,
-      }, 'Water settings retrieved');
+      return ApiResponse.success(
+        res,
+        {
+          ...settings,
+          daily_goal_ml: settings?.water_target ?? null,
+        },
+        'Water settings retrieved'
+      );
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -54,10 +58,14 @@ const waterSettingsController = {
       }
 
       const settings = await waterSettingsService.upsert(req.user.id, fields);
-      return ApiResponse.success(res, {
-        ...settings,
-        daily_goal_ml: settings?.water_target ?? null,
-      }, 'Water settings updated');
+      return ApiResponse.success(
+        res,
+        {
+          ...settings,
+          daily_goal_ml: settings?.water_target ?? null,
+        },
+        'Water settings updated'
+      );
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }

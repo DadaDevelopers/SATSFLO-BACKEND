@@ -38,12 +38,7 @@ router.get('/profile', userController.getProfile);
  * @desc    Update current user profile
  * @access  Private
  */
-router.put(
-  '/profile',
-  updateProfileValidation,
-  validate,
-  userController.updateProfile
-);
+router.put('/profile', updateProfileValidation, validate, userController.updateProfile);
 
 /**
  * @route   POST /api/v1/users/avatar
@@ -66,11 +61,7 @@ router.post('/profile/avatar', uploadAvatar.single('file'), userController.uploa
  * @desc    Get health profile
  * @access  Private
  */
-router.get(
-  '/health-profile',
-  sensitiveDataLimiter,
-  userController.getHealthProfile
-);
+router.get('/health-profile', sensitiveDataLimiter, userController.getHealthProfile);
 
 /**
  * @route   PUT /api/v1/users/health-profile
@@ -98,12 +89,7 @@ router.get('/preferences', userController.getPreferences);
  * @desc    Update user preferences
  * @access  Private
  */
-router.put(
-  '/preferences',
-  updatePreferencesValidation,
-  validate,
-  userController.updatePreferences
-);
+router.put('/preferences', updatePreferencesValidation, validate, userController.updatePreferences);
 
 // ==================== DEVICE TOKEN ====================
 
@@ -121,12 +107,7 @@ router.post('/device-token', userController.saveDeviceToken);
  * @desc    Delete user account
  * @access  Private
  */
-router.delete(
-  '/account',
-  deleteAccountValidation,
-  validate,
-  userController.deleteAccount
-);
+router.delete('/account', deleteAccountValidation, validate, userController.deleteAccount);
 
 /**
  * @route   GET /api/v1/users/export
@@ -142,13 +123,7 @@ router.get('/export', userController.exportData);
  * @desc    Search/list users (admin only)
  * @access  Admin
  */
-router.get(
-  '/',
-  authorize('admin'),
-  searchUsersValidation,
-  validate,
-  userController.searchUsers
-);
+router.get('/', authorize('admin'), searchUsersValidation, validate, userController.searchUsers);
 
 /**
  * @route   GET /api/v1/users/:userId

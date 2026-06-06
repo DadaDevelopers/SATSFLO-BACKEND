@@ -23,7 +23,7 @@ const communityController = {
         limit: Math.min(50, Math.max(1, Number(limit))),
       });
 
-      const threads = result.threads.map(t => ({
+      const threads = result.threads.map((t) => ({
         ...t,
         likes_count: t.like_count ?? 0,
         comments_count: t.comment_count ?? 0,
@@ -44,12 +44,16 @@ const communityController = {
       const { id } = req.params;
       const userId = req.user?.id ?? null;
       const thread = await communityService.getThread(id, userId);
-      return ApiResponse.success(res, {
-        ...thread,
-        likes_count: thread.like_count ?? 0,
-        comments_count: thread.comment_count ?? 0,
-        is_liked: thread.is_liked_by_me ?? false,
-      }, 'Thread retrieved');
+      return ApiResponse.success(
+        res,
+        {
+          ...thread,
+          likes_count: thread.like_count ?? 0,
+          comments_count: thread.comment_count ?? 0,
+          is_liked: thread.is_liked_by_me ?? false,
+        },
+        'Thread retrieved'
+      );
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -134,9 +138,16 @@ const communityController = {
       const { id: threadId, commentId } = req.params;
       const { content } = req.body;
       if (!content || typeof content !== 'string' || content.trim().length === 0) {
-        return ApiResponse.validationError(res, [{ field: 'content', message: 'content is required' }]);
+        return ApiResponse.validationError(res, [
+          { field: 'content', message: 'content is required' },
+        ]);
       }
-      const comment = await communityService.updateComment(req.user.id, threadId, commentId, content.trim());
+      const comment = await communityService.updateComment(
+        req.user.id,
+        threadId,
+        commentId,
+        content.trim()
+      );
       return ApiResponse.success(res, comment, 'Comment updated');
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
@@ -161,7 +172,11 @@ const communityController = {
     try {
       const { id } = req.params;
       const likeCount = await communityService.likeThread(req.user.id, id);
-      return ApiResponse.success(res, { like_count: likeCount, is_liked_by_me: true }, 'Thread liked');
+      return ApiResponse.success(
+        res,
+        { like_count: likeCount, is_liked_by_me: true },
+        'Thread liked'
+      );
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -171,7 +186,11 @@ const communityController = {
     try {
       const { id } = req.params;
       const likeCount = await communityService.unlikeThread(req.user.id, id);
-      return ApiResponse.success(res, { like_count: likeCount, is_liked_by_me: false }, 'Like removed');
+      return ApiResponse.success(
+        res,
+        { like_count: likeCount, is_liked_by_me: false },
+        'Like removed'
+      );
     } catch (err) {
       return ApiResponse.error(res, err.message, err.statusCode || 500);
     }
@@ -184,7 +203,7 @@ const communityController = {
   async getNotifications(req, res) {
     try {
       const notifications = await communityService.getNotifications(req.user.id);
-      const mapped = notifications.map(n => ({
+      const mapped = notifications.map((n) => ({
         ...n,
         read: n.is_read ?? false,
       }));

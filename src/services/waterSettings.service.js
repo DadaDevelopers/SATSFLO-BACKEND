@@ -7,7 +7,7 @@ const TABLE = 'water_settings';
 const DEFAULTS = {
   water_target: 2000,
   cup_capacity: 250,
-  cup_style: 'standard'
+  cup_style: 'standard',
 };
 
 class WaterSettingsService {
@@ -15,10 +15,7 @@ class WaterSettingsService {
    * Fetch water settings; returns defaults when none exist yet.
    */
   async get(userId) {
-    const result = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE user_id = $1`,
-      [userId]
-    );
+    const result = await pool.query(`SELECT * FROM ${TABLE} WHERE user_id = $1`, [userId]);
 
     if (!result.rows[0]) {
       return { user_id: userId, ...DEFAULTS };
@@ -36,8 +33,8 @@ class WaterSettingsService {
     const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
     const cols = keys.join(', ');
     const updates = keys
-      .filter(k => k !== 'user_id')
-      .map(k => `${k} = EXCLUDED.${k}`)
+      .filter((k) => k !== 'user_id')
+      .map((k) => `${k} = EXCLUDED.${k}`)
       .join(', ');
 
     const result = await pool.query(
