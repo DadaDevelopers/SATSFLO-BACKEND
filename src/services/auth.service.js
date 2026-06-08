@@ -489,6 +489,96 @@ class AuthService {
   }
 
   /**
+   * Sign in (or register) via Google ID token from the mobile Google Sign-In SDK.
+   * Finds user by google_id, falls back to email match (links existing local account),
+   * or creates a new user if neither exists.
+   */
+  async googleSignIn(idToken) {
+    const { verifyGoogleToken } = require('../config/google');
+    const payload = await verifyGoogleToken(idToken);
+
+    const { sub: googleId, email, name, picture, email_verified } = payload;
+
+    const existing = await pool.query(
+      'SELECT * FROM users WHERE google_id = $1 OR email = $2 LIMIT 1',
+      [googleId, email.toLowerCase()]
+    );
+    let user = existing.rows[0];
+
+    if (!user) {
+      // New user — register via Google (no password required)
+      const result = await pool.query(
+        `INSERT INTO users
+           (email, name, avatar_url, email_verified, auth_provider, google_id, role, status, created_at)
+         VALUES ($1, $2, $3, $4, 'google', $5, 'user', 'active', NOW())
+         RETURNING id, email, name, role, status, email_verified`,
+        [email.toLowerCase(), name, picture || null, email_verified, googleId]
+      );
+      user = result.rows[0];
+
+      // Create default health profile
+      await pool.query(
+        `INSERT INTO health_profiles (user_id, average_cycle_length, average_period_length, created_at)
+         VALUES ($1, 28, 5, NOW())
+         ON CONFLICT (user_id) DO NOTHING`,
+        [user.id]
+      );
+
+      // Fire-and-forget welcome email
+      emailService
+        .sendWelcomeEmail(user.email, user.name)
+        .then(() => logger.info('Welcome email sent to Google user', { userId: user.id }))
+        .catch((err) =>
+          logger.error('Welcome email failed for Google user', {
+            error: err.message,
+            userId: user.id,
+          })
+        );
+
+      logger.info('New user registered via Google', { userId: user.id, email });
+    } else if (!user.google_id) {
+      // Existing local account — link Google ID and mark email verified
+      await pool.query(
+        `UPDATE users
+         SET google_id = $1, auth_provider = 'google', email_verified = true
+         WHERE id = $2`,
+        [googleId, user.id]
+      );
+      logger.info('Google account linked to existing user', { userId: user.id });
+    }
+
+    if (user.status === 'suspended') {
+      const err = new Error('Account suspended. Please contact support.');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (user.status === 'deleted') {
+      const err = new Error('Account not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+
+    const tokens = this.generateTokens(user);
+    await this.storeRefreshToken(user.id, tokens.refreshToken);
+
+    logger.info('Google sign-in successful', { userId: user.id });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        emailVerified: true,
+      },
+      ...tokens,
+    };
+  }
+
+  /**
    * Generate access and refresh tokens
    */
   generateTokens(user) {

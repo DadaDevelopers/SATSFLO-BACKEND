@@ -17,6 +17,7 @@ const {
 const {
   registerValidation,
   loginValidation,
+  googleAuthValidation,
   refreshTokenValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
@@ -39,6 +40,12 @@ router.post(
  * Body: { email, password }
  */
 router.post('/login', authLimiter, loginValidation, validate, authController.login);
+
+/**
+ * POST /api/v1/auth/google
+ * Body: { idToken } — Google ID token from the mobile Google Sign-In SDK
+ */
+router.post('/google', authLimiter, googleAuthValidation, validate, authController.googleAuth);
 
 /**
  * POST /api/v1/auth/forgot-password
