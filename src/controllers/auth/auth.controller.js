@@ -255,6 +255,20 @@ const resendVerification = async (req, res, next) => {
 };
 
 /**
+ * POST /api/v1/auth/google
+ * Body: { idToken } — Google ID token from the mobile Google Sign-In SDK
+ */
+const googleAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    const result = await authService.googleSignIn(idToken);
+    return ApiResponse.success(res, result, 'Google sign-in successful');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/v1/auth/me
  */
 const getCurrentUser = async (req, res, next) => {
@@ -277,6 +291,7 @@ const getCurrentUser = async (req, res, next) => {
 module.exports = {
   register,
   login,
+  googleAuth,
   refreshToken,
   logout,
   logoutAll,

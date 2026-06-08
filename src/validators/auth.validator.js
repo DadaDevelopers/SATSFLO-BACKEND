@@ -137,9 +137,17 @@ const verifyEmailValidation = [
   param('token').notEmpty().withMessage('Verification token is required'),
 ];
 
+/**
+ * Google auth validation
+ */
+const googleAuthValidation = [
+  body('idToken').notEmpty().withMessage('Google ID token is required'),
+];
+
 module.exports = {
   registerValidation,
   loginValidation,
+  googleAuthValidation,
   refreshTokenValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
