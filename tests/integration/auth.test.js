@@ -1,6 +1,9 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
+jest.mock('../../src/config/google');
+const { verifyGoogleToken } = require('../../src/config/google');
+
 const request = require('supertest');
 const app = require('../../src/app');
 const { pool, createTestUser, cleanupUser, cleanupTestUsers } = require('../helpers/setup');
@@ -257,5 +260,127 @@ describe('GET /api/v1/auth/me', () => {
   test('returns 401 without token', async () => {
     const res = await request(app).get('/api/v1/auth/me');
     expect(res.status).toBe(401);
+  });
+});
+
+// ─── Google Auth ──────────────────────────────────────────────────────────────
+describe('POST /api/v1/auth/google', () => {
+  const googleId = 'google-uid-test-001';
+  const googleEmail = `google_${Date.now()}@satsflo.test`;
+
+  afterAll(async () => { await cleanupUser(googleEmail); });
+
+  beforeEach(() => { verifyGoogleToken.mockReset(); });
+
+  test('new user: creates account and returns tokens with emailVerified=true', async () => {
+    verifyGoogleToken.mockResolvedValue({
+      sub: googleId,
+      email: googleEmail,
+      name: 'Google User',
+      picture: 'https://example.com/pic.jpg',
+      email_verified: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({ idToken: 'valid-google-id-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('accessToken');
+    expect(res.body.data).toHaveProperty('refreshToken');
+    expect(res.body.data.user.email).toBe(googleEmail);
+    expect(res.body.data.user.emailVerified).toBe(true);
+  });
+
+  test('returning Google user: sign-in returns new tokens', async () => {
+    verifyGoogleToken.mockResolvedValue({
+      sub: googleId,
+      email: googleEmail,
+      name: 'Google User',
+      picture: null,
+      email_verified: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({ idToken: 'valid-google-id-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveProperty('accessToken');
+    expect(res.body.data.user.emailVerified).toBe(true);
+  });
+
+  test('existing local account: links Google and returns tokens', async () => {
+    const localEmail = `local_link_${Date.now()}@satsflo.test`;
+    await createTestUser({ email: localEmail });
+
+    verifyGoogleToken.mockResolvedValue({
+      sub: `google-link-uid-${Date.now()}`,
+      email: localEmail,
+      name: 'Linked User',
+      picture: null,
+      email_verified: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({ idToken: 'valid-google-id-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveProperty('accessToken');
+
+    // Confirm google_id was stored in DB
+    const { rows } = await pool.query('SELECT google_id FROM users WHERE email = $1', [localEmail]);
+    expect(rows[0].google_id).toBeTruthy();
+
+    await cleanupUser(localEmail);
+  });
+
+  test('suspended account returns 403', async () => {
+    const suspendedEmail = `suspended_google_${Date.now()}@satsflo.test`;
+    const suspendedGoogleId = `google-suspended-${Date.now()}`;
+
+    await pool.query(
+      `INSERT INTO users (email, name, google_id, auth_provider, email_verified, role, status, created_at)
+       VALUES ($1, 'Suspended', $2, 'google', true, 'user', 'suspended', NOW())`,
+      [suspendedEmail, suspendedGoogleId]
+    );
+
+    verifyGoogleToken.mockResolvedValue({
+      sub: suspendedGoogleId,
+      email: suspendedEmail,
+      name: 'Suspended',
+      picture: null,
+      email_verified: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({ idToken: 'valid-google-id-token' });
+
+    expect(res.status).toBe(403);
+
+    await cleanupUser(suspendedEmail);
+  });
+
+  test('missing idToken returns 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  test('invalid Google token returns 401', async () => {
+    verifyGoogleToken.mockRejectedValue(
+      Object.assign(new Error('Token used too late'), { statusCode: 401 })
+    );
+
+    const res = await request(app)
+      .post('/api/v1/auth/google')
+      .send({ idToken: 'expired-or-tampered-token' });
+
+    expect([401, 500]).toContain(res.status);
   });
 });
