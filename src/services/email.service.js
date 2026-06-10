@@ -92,19 +92,6 @@ async function send({ to, subject, html }) {
 // ─── 1. OTP email (forgot-password) ───────────────────────────────────────────
 
 const sendOTPEmail = async (email, name, otp) => {
-  const digits = String(otp).split('');
-
-  const digitBoxes = digits
-    .map(
-      (d) =>
-        `<td style="width:44px;height:52px;background:#FFF7ED;border:2px solid #FED7AA;
-                border-radius:10px;text-align:center;vertical-align:middle;
-                font-size:28px;font-weight:700;color:${BRAND_COLOR};
-                font-family:monospace;padding:0 6px;">${d}</td>
-     <td style="width:8px;"></td>`
-    )
-    .join('');
-
   const body = `
     <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">
       Your password reset code
@@ -115,14 +102,15 @@ const sendOTPEmail = async (email, name, otp) => {
       Enter it in the app within the next 10 minutes.
     </p>
 
-    <!-- OTP digit boxes -->
-    <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
-      <tr>${digitBoxes}</tr>
-    </table>
+    <!-- OTP block — single unbroken string so mobile clients can long-press and copy it in one tap -->
+    <div style="background:#FFF7ED;border:2px solid #FED7AA;border-radius:12px;
+                padding:20px 24px;margin:0 0 28px;text-align:center;
+                user-select:all;-webkit-user-select:all;">
+      <span style="font-size:38px;font-weight:700;letter-spacing:10px;
+                   font-family:monospace;color:${BRAND_COLOR};
+                   user-select:all;-webkit-user-select:all;">${otp}</span>
+    </div>
 
-    <p style="margin:0 0 4px;font-size:14px;color:#374151;font-weight:500;">
-      Code: <span style="letter-spacing:6px;font-size:20px;font-weight:700;color:${BRAND_COLOR};">${otp}</span>
-    </p>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
       This code expires in <strong>10 minutes</strong>. Do not share it with anyone —
