@@ -99,7 +99,7 @@ Returns database connectivity status and uptime.
 | Doc | Contents |
 |-----|----------|
 | [API.md](./API.md) | All endpoints, request/response shapes |
-| [PAYMENTS.md](./PAYMENTS.md) | Lightning payment flow in detail |
+| [docs/PAYMENTS.md](./docs/PAYMENTS.md) | Lightning payment flow in detail |
 | [TESTING.md](./TESTING.md) | Test suite, how to run, what's covered |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System design, DB schema, request lifecycle |
 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Render setup, env vars, migrations |
