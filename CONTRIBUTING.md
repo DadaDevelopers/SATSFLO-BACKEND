@@ -35,10 +35,10 @@ chore(deps): upgrade node-pg-migrate to v8
 
 ## Workflow
 
-1. Branch off `main`
+1. Branch off `dev`
 2. Make changes
 3. Run the checklist below before opening a PR
-4. Open a PR against `main` — fill in the description template
+4. Open a PR against `dev` — fill in the description template
 
 ## Pre-PR Checklist
 
@@ -82,6 +82,15 @@ Always implement both `exports.up` and `exports.down`.
 ## Environment Variables
 
 Never commit real secrets. The `.env` file is gitignored. Add new variables to `.env.example` with a placeholder value and document them in `docs/DEPLOYMENT.md`.
+
+## Branch Strategy
+
+| Branch | Purpose |
+|--------|---------|
+| `dev` | integration branch — all PRs target here |
+| `main` | production only — merged from `dev` on release |
+
+Never open a PR directly against `main`.
 
 ## Pull Request Template
 
