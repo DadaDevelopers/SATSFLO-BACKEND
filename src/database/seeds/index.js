@@ -7,15 +7,10 @@
 
 require('dotenv').config();
 const bcrypt = require('bcrypt');
-const { supabaseAdmin } = require('../../config/database');
-const Encryption = require('../../utils/encryption');
-const logger = require('../../utils/logger');
+const { pool } = require('../../config/database');
 
 const SALT_ROUNDS = 12;
 
-/**
- * Seed users
- */
 async function seedUsers() {
   console.log('Seeding users...');
 
@@ -25,22 +20,22 @@ async function seedUsers() {
       password: 'Admin123!',
       name: 'Admin User',
       role: 'admin',
-      email_verified: true
+      email_verified: true,
     },
     {
       email: 'test@satsflow.com',
       password: 'Test123!',
       name: 'Test User',
       role: 'user',
-      email_verified: true
+      email_verified: true,
     },
     {
       email: 'demo@satsflow.com',
       password: 'Demo123!',
       name: 'Demo User',
       role: 'user',
-      email_verified: true
-    }
+      email_verified: true,
+    },
   ];
 
   const createdUsers = [];
@@ -48,74 +43,65 @@ async function seedUsers() {
   for (const user of users) {
     const passwordHash = await bcrypt.hash(user.password, SALT_ROUNDS);
 
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .upsert({
-        email: user.email,
-        password_hash: passwordHash,
-        name: user.name,
-        role: user.role,
-        email_verified: user.email_verified,
-        status: 'active',
-        created_at: new Date().toISOString()
-      }, { onConflict: 'email' })
-      .select('id, email, name, role')
-      .single();
-
-    if (error) {
-      console.error(`Failed to create user ${user.email}:`, error.message);
-    } else {
-      console.log(`  Created user: ${data.email} (${data.role})`);
-      createdUsers.push(data);
+    try {
+      const result = await pool.query(
+        `INSERT INTO users (email, password_hash, name, role, email_verified, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+         ON CONFLICT (email) DO UPDATE SET
+           password_hash  = EXCLUDED.password_hash,
+           name           = EXCLUDED.name,
+           role           = EXCLUDED.role,
+           email_verified = EXCLUDED.email_verified
+         RETURNING id, email, name, role`,
+        [user.email, passwordHash, user.name, user.role, user.email_verified]
+      );
+      console.log(`  Created user: ${result.rows[0].email} (${result.rows[0].role})`);
+      createdUsers.push(result.rows[0]);
+    } catch (err) {
+      console.error(`Failed to create user ${user.email}:`, err.message);
     }
   }
 
   return createdUsers;
 }
 
-/**
- * Seed health profiles
- */
 async function seedHealthProfiles(users) {
   console.log('Seeding health profiles...');
 
   for (const user of users) {
-    const { error } = await supabaseAdmin
-      .from('health_profiles')
-      .upsert({
-        user_id: user.id,
-        average_cycle_length: Math.floor(Math.random() * 7) + 26, // 26-32
-        average_period_length: Math.floor(Math.random() * 3) + 4, // 4-6
-        created_at: new Date().toISOString()
-      }, { onConflict: 'user_id' });
-
-    if (error) {
-      console.error(`Failed to create health profile for ${user.email}:`, error.message);
-    } else {
+    try {
+      await pool.query(
+        `INSERT INTO health_profiles (user_id, average_cycle_length, average_period_length, created_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (user_id) DO NOTHING`,
+        [
+          user.id,
+          Math.floor(Math.random() * 7) + 26, // 26-32
+          Math.floor(Math.random() * 3) + 4, // 4-6
+        ]
+      );
       console.log(`  Created health profile for: ${user.email}`);
+    } catch (err) {
+      console.error(`Failed to create health profile for ${user.email}:`, err.message);
     }
   }
 }
 
-/**
- * Seed sample cycles for test user
- */
 async function seedCycles(users) {
   console.log('Seeding cycles...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
-  // Generate 6 months of cycles
   const today = new Date();
   const cycles = [];
 
   for (let i = 5; i >= 0; i--) {
     const startDate = new Date(today);
     startDate.setMonth(startDate.getMonth() - i);
-    startDate.setDate(1 + Math.floor(Math.random() * 5)); // Random start between 1-5
+    startDate.setDate(1 + Math.floor(Math.random() * 5));
 
-    const periodLength = Math.floor(Math.random() * 3) + 4; // 4-6 days
+    const periodLength = Math.floor(Math.random() * 3) + 4;
     const periodEndDate = new Date(startDate);
     periodEndDate.setDate(periodEndDate.getDate() + periodLength - 1);
 
@@ -124,11 +110,10 @@ async function seedCycles(users) {
       start_date: startDate.toISOString().split('T')[0],
       period_end_date: periodEndDate.toISOString().split('T')[0],
       period_length: periodLength,
-      created_at: new Date().toISOString()
     });
   }
 
-  // Calculate cycle lengths and end dates
+  // Fill in cycle lengths and end dates
   for (let i = 0; i < cycles.length - 1; i++) {
     const endDate = new Date(cycles[i + 1].start_date);
     endDate.setDate(endDate.getDate() - 1);
@@ -139,27 +124,26 @@ async function seedCycles(users) {
   }
 
   for (const cycle of cycles) {
-    const { data, error } = await supabaseAdmin
-      .from('cycles')
-      .insert(cycle)
-      .select('id')
-      .single();
+    try {
+      const keys = Object.keys(cycle);
+      const values = Object.values(cycle);
+      const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
 
-    if (error) {
-      console.error(`Failed to create cycle:`, error.message);
-    } else {
+      await pool.query(
+        `INSERT INTO cycles (${keys.join(', ')}, created_at) VALUES (${placeholders}, NOW())`,
+        values
+      );
       console.log(`  Created cycle starting: ${cycle.start_date}`);
+    } catch (err) {
+      console.error('Failed to create cycle:', err.message);
     }
   }
 }
 
-/**
- * Seed sample symptoms
- */
 async function seedSymptoms(users) {
   console.log('Seeding symptoms...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
   const symptoms = [
@@ -167,7 +151,7 @@ async function seedSymptoms(users) {
     { symptom: 'headache', category: 'pain', severity: 1 },
     { symptom: 'bloating', category: 'physical', severity: 2 },
     { symptom: 'fatigue', category: 'physical', severity: 2 },
-    { symptom: 'acne', category: 'skin', severity: 1 }
+    { symptom: 'acne', category: 'skin', severity: 1 },
   ];
 
   const today = new Date();
@@ -175,27 +159,23 @@ async function seedSymptoms(users) {
   for (let i = 0; i < 14; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
 
-    // Random symptoms for the day
     const numSymptoms = Math.floor(Math.random() * 3) + 1;
-    const daySymptoms = symptoms
-      .sort(() => Math.random() - 0.5)
-      .slice(0, numSymptoms);
+    const daySymptoms = [...symptoms].sort(() => Math.random() - 0.5).slice(0, numSymptoms);
 
     for (const s of daySymptoms) {
-      const { error } = await supabaseAdmin
-        .from('symptoms')
-        .insert({
-          user_id: testUser.id,
-          date: date.toISOString().split('T')[0],
-          symptom: s.symptom,
-          category: s.category,
-          severity: s.severity,
-          created_at: new Date().toISOString()
-        });
-
-      if (error && !error.message.includes('duplicate')) {
-        console.error(`Failed to create symptom:`, error.message);
+      try {
+        await pool.query(
+          `INSERT INTO symptoms (user_id, date, symptom, category, severity, created_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())
+           ON CONFLICT DO NOTHING`,
+          [testUser.id, dateStr, s.symptom, s.category, s.severity]
+        );
+      } catch (err) {
+        if (!err.message.includes('duplicate')) {
+          console.error('Failed to create symptom:', err.message);
+        }
       }
     }
   }
@@ -203,13 +183,10 @@ async function seedSymptoms(users) {
   console.log('  Created symptoms for past 14 days');
 }
 
-/**
- * Seed sample moods
- */
 async function seedMoods(users) {
   console.log('Seeding moods...');
 
-  const testUser = users.find(u => u.email === 'test@satsflow.com');
+  const testUser = users.find((u) => u.email === 'test@satsflow.com');
   if (!testUser) return;
 
   const moods = ['happy', 'calm', 'energetic', 'tired', 'irritable', 'anxious'];
@@ -218,63 +195,59 @@ async function seedMoods(users) {
   for (let i = 0; i < 14; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
 
     const mood = moods[Math.floor(Math.random() * moods.length)];
-    const intensity = Math.floor(Math.random() * 3) + 2; // 2-4
+    const intensity = Math.floor(Math.random() * 3) + 2;
 
-    const { error } = await supabaseAdmin
-      .from('moods')
-      .insert({
-        user_id: testUser.id,
-        date: date.toISOString().split('T')[0],
-        mood,
-        intensity,
-        created_at: new Date().toISOString()
-      });
-
-    if (error && !error.message.includes('duplicate')) {
-      console.error(`Failed to create mood:`, error.message);
+    try {
+      await pool.query(
+        `INSERT INTO moods (user_id, date, mood, intensity, created_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT DO NOTHING`,
+        [testUser.id, dateStr, mood, intensity]
+      );
+    } catch (err) {
+      if (!err.message.includes('duplicate')) {
+        console.error('Failed to create mood:', err.message);
+      }
     }
   }
 
   console.log('  Created moods for past 14 days');
 }
 
-/**
- * Seed forums
- */
 async function seedForums(users) {
   console.log('Seeding forums...');
 
-  const adminUser = users.find(u => u.role === 'admin');
+  const adminUser = users.find((u) => u.role === 'admin');
 
   const forums = [
     { name: 'General Discussion', slug: 'general', description: 'General chat and discussions' },
     { name: 'Health Tips', slug: 'health-tips', description: 'Share and discover health tips' },
     { name: 'Support Circle', slug: 'support', description: 'Support and encouragement' },
-    { name: 'Bitcoin & Rewards', slug: 'bitcoin', description: 'Discuss Bitcoin rewards and Lightning' }
+    {
+      name: 'Bitcoin & Rewards',
+      slug: 'bitcoin',
+      description: 'Discuss Bitcoin rewards and Lightning',
+    },
   ];
 
   for (const forum of forums) {
-    const { error } = await supabaseAdmin
-      .from('forums')
-      .upsert({
-        ...forum,
-        created_by: adminUser?.id,
-        created_at: new Date().toISOString()
-      }, { onConflict: 'slug' });
-
-    if (error) {
-      console.error(`Failed to create forum ${forum.name}:`, error.message);
-    } else {
+    try {
+      await pool.query(
+        `INSERT INTO forums (name, slug, description, created_by, created_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (slug) DO NOTHING`,
+        [forum.name, forum.slug, forum.description, adminUser?.id]
+      );
       console.log(`  Created forum: ${forum.name}`);
+    } catch (err) {
+      console.error(`Failed to create forum ${forum.name}:`, err.message);
     }
   }
 }
 
-/**
- * Main seed function
- */
 async function seed() {
   console.log('\n========================================');
   console.log('  SATSFLOW DATABASE SEEDER');
@@ -293,16 +266,15 @@ async function seed() {
     console.log('========================================');
     console.log('\nTest Accounts:');
     console.log('  Admin: admin@satsflow.com / Admin123!');
-    console.log('  User:  test@satsflow.com / Test123!');
-    console.log('  Demo:  demo@satsflow.com / Demo123!');
+    console.log('  User:  test@satsflow.com  / Test123!');
+    console.log('  Demo:  demo@satsflow.com  / Demo123!');
     console.log('\n');
-
-    process.exit(0);
   } catch (error) {
     console.error('Seeding failed:', error);
-    process.exit(1);
+  } finally {
+    await pool.end();
+    process.exit(0);
   }
 }
 
-// Run seeder
 seed();

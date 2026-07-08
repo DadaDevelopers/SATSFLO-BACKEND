@@ -5,8 +5,17 @@
  */
 
 const healthService = require('../../services/health.service');
+const dayLogsService = require('../../services/dayLogs.service');
 const ApiResponse = require('../../utils/response');
 const logger = require('../../utils/logger');
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isValidDate(s) {
+  return DATE_RE.test(s) && !isNaN(new Date(s).getTime());
+}
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 // ==================== SYMPTOMS ====================
 
@@ -51,7 +60,7 @@ const getSymptoms = async (req, res, next) => {
       startDate,
       endDate,
       category,
-      symptom
+      symptom,
     });
 
     return ApiResponse.paginated(res, result.symptoms, result.pagination);
@@ -141,7 +150,7 @@ const getMoods = async (req, res, next) => {
       limit: parseInt(limit) || 20,
       startDate,
       endDate,
-      mood
+      mood,
     });
 
     return ApiResponse.paginated(res, result.moods, result.pagination);
@@ -201,15 +210,17 @@ const getSymptomAnalytics = async (req, res, next) => {
 
     // Default to last 3 months
     const end = endDate || new Date().toISOString().split('T')[0];
-    const start = startDate || (() => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 3);
-      return d.toISOString().split('T')[0];
-    })();
+    const start =
+      startDate ||
+      (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 3);
+        return d.toISOString().split('T')[0];
+      })();
 
     const analytics = await healthService.getSymptomAnalytics(req.user.id, {
       startDate: start,
-      endDate: end
+      endDate: end,
     });
 
     return ApiResponse.success(res, analytics);
@@ -227,15 +238,17 @@ const getMoodAnalytics = async (req, res, next) => {
     const { startDate, endDate } = req.query;
 
     const end = endDate || new Date().toISOString().split('T')[0];
-    const start = startDate || (() => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 3);
-      return d.toISOString().split('T')[0];
-    })();
+    const start =
+      startDate ||
+      (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 3);
+        return d.toISOString().split('T')[0];
+      })();
 
     const analytics = await healthService.getMoodAnalytics(req.user.id, {
       startDate: start,
-      endDate: end
+      endDate: end,
     });
 
     return ApiResponse.success(res, analytics);
@@ -270,6 +283,193 @@ const getHealthTrends = async (req, res, next) => {
   }
 };
 
+// ==================== FLOW ====================
+
+/**
+ * POST /api/v1/health/flow  — log flow level for a date
+ * PUT  /api/v1/health/flow  — update flow level for a date
+ * Body: { flow: 'spotting'|'light'|'medium'|'heavy'|'very_heavy', date?: 'YYYY-MM-DD' }
+ */
+const VALID_FLOW = ['spotting', 'light', 'medium', 'heavy', 'very_heavy'];
+
+const logFlow = async (req, res, next) => {
+  try {
+    const { flow, date } = req.body;
+    if (!flow || !VALID_FLOW.includes(flow)) {
+      return ApiResponse.validationError(res, [
+        {
+          field: 'flow',
+          message: `flow must be one of: ${VALID_FLOW.join(', ')}`,
+        },
+      ]);
+    }
+    const logDate = date || today();
+    if (!isValidDate(logDate)) {
+      return ApiResponse.validationError(res, [
+        { field: 'date', message: 'date must be YYYY-MM-DD' },
+      ]);
+    }
+    const log = await dayLogsService.upsert(req.user.id, logDate, { flow_level: flow });
+    return ApiResponse.success(res, { date: log.log_date, flow: log.flow_level }, 'Flow logged');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==================== MEDICINE ====================
+
+/**
+ * POST /api/v1/health/medicine  — log contraception used for a date
+ * PUT  /api/v1/health/medicine  — update contraception for a date
+ * Body: { medicine: 'pill'|'condom'|'patch'|'injection'|'spermicide'|'iud'|'implant'|'vaginal_ring', date?: 'YYYY-MM-DD' }
+ */
+const VALID_MEDICINE = [
+  'condom',
+  'patch',
+  'injection',
+  'spermicide',
+  'iud',
+  'pill',
+  'implant',
+  'vaginal_ring',
+];
+
+const logMedicine = async (req, res, next) => {
+  try {
+    const { medicine, date } = req.body;
+    if (!medicine || !VALID_MEDICINE.includes(medicine)) {
+      return ApiResponse.validationError(res, [
+        {
+          field: 'medicine',
+          message: `medicine must be one of: ${VALID_MEDICINE.join(', ')}`,
+        },
+      ]);
+    }
+    const logDate = date || today();
+    if (!isValidDate(logDate)) {
+      return ApiResponse.validationError(res, [
+        { field: 'date', message: 'date must be YYYY-MM-DD' },
+      ]);
+    }
+    const log = await dayLogsService.upsert(req.user.id, logDate, { medicine });
+    return ApiResponse.success(
+      res,
+      { date: log.log_date, medicine: log.medicine },
+      'Medicine logged'
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==================== WEIGHT ====================
+
+/**
+ * POST /api/v1/health/weight  — log weight (create or update)
+ * PUT  /api/v1/health/weight  — update weight (same upsert)
+ * Body: { weight: number, date?: 'YYYY-MM-DD' }
+ */
+const logWeight = async (req, res, next) => {
+  try {
+    const { weight, date } = req.body;
+    if (weight === undefined || isNaN(Number(weight))) {
+      return ApiResponse.validationError(res, [
+        { field: 'weight', message: 'weight (number, kg) is required' },
+      ]);
+    }
+    const logDate = date || today();
+    if (!isValidDate(logDate)) {
+      return ApiResponse.validationError(res, [
+        { field: 'date', message: 'date must be YYYY-MM-DD' },
+      ]);
+    }
+    const log = await dayLogsService.upsert(req.user.id, logDate, { weight: Number(weight) });
+    return ApiResponse.success(res, { date: log.log_date, weight: log.weight }, 'Weight logged');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/health/weight?from=YYYY-MM-DD&to=YYYY-MM-DD  — weight history
+ * Defaults to last 30 days if no range given.
+ */
+const getWeightHistory = async (req, res, next) => {
+  try {
+    const to = req.query.to || today();
+    const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    if (!isValidDate(from) || !isValidDate(to)) {
+      return ApiResponse.validationError(res, [
+        { field: 'from/to', message: 'Dates must be YYYY-MM-DD' },
+      ]);
+    }
+    const logs = await dayLogsService.getRange(req.user.id, from, to);
+    const history = logs
+      .filter((l) => l.weight !== null && l.weight !== undefined)
+      .map((l) => ({ date: l.log_date, weight: l.weight }));
+    return ApiResponse.success(res, history, 'Weight history retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==================== TEMPERATURE ====================
+
+/**
+ * POST /api/v1/health/temperature  — log basal body temperature (create or update)
+ * PUT  /api/v1/health/temperature  — update temperature (same upsert)
+ * Body: { temperature: number, date?: 'YYYY-MM-DD' }
+ */
+const logTemperature = async (req, res, next) => {
+  try {
+    const { temperature, date } = req.body;
+    if (temperature === undefined || isNaN(Number(temperature))) {
+      return ApiResponse.validationError(res, [
+        { field: 'temperature', message: 'temperature (number, °C) is required' },
+      ]);
+    }
+    const logDate = date || today();
+    if (!isValidDate(logDate)) {
+      return ApiResponse.validationError(res, [
+        { field: 'date', message: 'date must be YYYY-MM-DD' },
+      ]);
+    }
+    const log = await dayLogsService.upsert(req.user.id, logDate, {
+      temperature: Number(temperature),
+    });
+    return ApiResponse.success(
+      res,
+      { date: log.log_date, temperature: log.temperature },
+      'Temperature logged'
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/health/temperature?from=YYYY-MM-DD&to=YYYY-MM-DD  — temperature history
+ * Defaults to last 30 days if no range given.
+ */
+const getTemperatureHistory = async (req, res, next) => {
+  try {
+    const to = req.query.to || today();
+    const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    if (!isValidDate(from) || !isValidDate(to)) {
+      return ApiResponse.validationError(res, [
+        { field: 'from/to', message: 'Dates must be YYYY-MM-DD' },
+      ]);
+    }
+    const logs = await dayLogsService.getRange(req.user.id, from, to);
+    const history = logs
+      .filter((l) => l.temperature !== null && l.temperature !== undefined)
+      .map((l) => ({ date: l.log_date, temperature: l.temperature }));
+    return ApiResponse.success(res, history, 'Temperature history retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   // Symptoms
   logSymptom,
@@ -291,5 +491,15 @@ module.exports = {
   getSymptomAnalytics,
   getMoodAnalytics,
   getDailySummary,
-  getHealthTrends
+  getHealthTrends,
+
+  // Flow & Medicine
+  logFlow,
+  logMedicine,
+
+  // Weight & Temperature
+  logWeight,
+  getWeightHistory,
+  logTemperature,
+  getTemperatureHistory,
 };

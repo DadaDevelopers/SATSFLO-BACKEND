@@ -13,5 +13,5 @@ module.exports = {
   ...authValidators,
   ...userValidators,
   ...cycleValidators,
-  ...healthValidators
+  ...healthValidators,
 };

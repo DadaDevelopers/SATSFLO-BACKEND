@@ -1,7 +1,5 @@
 /**
  * Auth Routes
- *
- * Authentication and authorization endpoints
  */
 
 const express = require('express');
@@ -10,21 +8,24 @@ const router = express.Router();
 const authController = require('../controllers/auth/auth.controller');
 const { authenticateToken } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
-const { authLimiter, passwordResetLimiter, registrationLimiter } = require('../middleware/rateLimiter');
+const {
+  authLimiter,
+  passwordResetLimiter,
+  registrationLimiter,
+  resendVerificationLimiter,
+} = require('../middleware/rateLimiter');
 const {
   registerValidation,
   loginValidation,
+  googleAuthValidation,
   refreshTokenValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
-  changePasswordValidation,
-  verifyEmailValidation
 } = require('../validators/auth.validator');
 
 /**
- * @route   POST /api/v1/auth/register
- * @desc    Register a new user
- * @access  Public
+ * POST /api/v1/auth/register
+ * Body: { name, email, password, confirm_password }
  */
 router.post(
   '/register',
@@ -35,81 +36,20 @@ router.post(
 );
 
 /**
- * @route   POST /api/v1/auth/login
- * @desc    Login user
- * @access  Public
+ * POST /api/v1/auth/login
+ * Body: { email, password }
  */
-router.post(
-  '/login',
-  authLimiter,
-  loginValidation,
-  validate,
-  authController.login
-);
+router.post('/login', authLimiter, loginValidation, validate, authController.login);
 
 /**
- * @route   POST /api/v1/auth/refresh
- * @desc    Refresh access token
- * @access  Public
+ * POST /api/v1/auth/google
+ * Body: { idToken } — Google ID token from the mobile Google Sign-In SDK
  */
-router.post(
-  '/refresh',
-  refreshTokenValidation,
-  validate,
-  authController.refreshToken
-);
+router.post('/google', authLimiter, googleAuthValidation, validate, authController.googleAuth);
 
 /**
- * @route   POST /api/v1/auth/logout
- * @desc    Logout user
- * @access  Private
- */
-router.post(
-  '/logout',
-  authenticateToken,
-  authController.logout
-);
-
-/**
- * @route   POST /api/v1/auth/logout-all
- * @desc    Logout from all devices
- * @access  Private
- */
-router.post(
-  '/logout-all',
-  authenticateToken,
-  authController.logoutAll
-);
-
-/**
- * @route   GET /api/v1/auth/verify-email/:token
- * @desc    Verify email address
- * @access  Public
- */
-router.get(
-  '/verify-email/:token',
-  verifyEmailValidation,
-  validate,
-  authController.verifyEmail
-);
-
-/**
- * @route   POST /api/v1/auth/resend-verification
- * @desc    Resend verification email
- * @access  Public
- */
-router.post(
-  '/resend-verification',
-  authLimiter,
-  forgotPasswordValidation, // Same validation - just email
-  validate,
-  authController.resendVerification
-);
-
-/**
- * @route   POST /api/v1/auth/forgot-password
- * @desc    Request password reset
- * @access  Public
+ * POST /api/v1/auth/forgot-password
+ * Body: { email } — sends 4-digit OTP to email
  */
 router.post(
   '/forgot-password',
@@ -120,9 +60,14 @@ router.post(
 );
 
 /**
- * @route   POST /api/v1/auth/reset-password/:token
- * @desc    Reset password with token
- * @access  Public
+ * POST /api/v1/auth/verify-otp
+ * Body: { email, otp } — verifies 6-digit OTP, returns { reset_token }
+ */
+router.post('/verify-otp', authLimiter, authController.verifyOtp);
+
+/**
+ * POST /api/v1/auth/reset-password/:token
+ * Body: { password, confirm_password }
  */
 router.post(
   '/reset-password/:token',
@@ -132,27 +77,43 @@ router.post(
 );
 
 /**
- * @route   PUT /api/v1/auth/change-password
- * @desc    Change password (authenticated)
- * @access  Private
+ * POST /api/v1/auth/refresh
+ * Body: { refreshToken }
  */
-router.put(
-  '/change-password',
+router.post('/refresh', refreshTokenValidation, validate, authController.refreshToken);
+
+/**
+ * POST /api/v1/auth/logout
+ * Body: { refreshToken }
+ */
+router.post('/logout', authenticateToken, authController.logout);
+
+/**
+ * POST /api/v1/auth/logout-all
+ */
+router.post('/logout-all', authenticateToken, authController.logoutAll);
+
+/**
+ * GET /api/v1/auth/verify-email/:token
+ * No auth required — user arrives here by clicking the link in their email.
+ * Returns an HTML page.
+ */
+router.get('/verify-email/:token', authController.verifyEmail);
+
+/**
+ * POST /api/v1/auth/resend-verification
+ * Requires Bearer token. Generates a new token and resends the verification email.
+ */
+router.post(
+  '/resend-verification',
   authenticateToken,
-  changePasswordValidation,
-  validate,
-  authController.changePassword
+  resendVerificationLimiter,
+  authController.resendVerification
 );
 
 /**
- * @route   GET /api/v1/auth/me
- * @desc    Get current authenticated user
- * @access  Private
+ * GET /api/v1/auth/me
  */
-router.get(
-  '/me',
-  authenticateToken,
-  authController.getCurrentUser
-);
+router.get('/me', authenticateToken, authController.getCurrentUser);
 
 module.exports = router;

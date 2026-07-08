@@ -14,12 +14,14 @@ const logger = require('../../utils/logger');
  */
 const startPeriod = async (req, res, next) => {
   try {
-    const { date, flowIntensity, notes } = req.body;
+    // Accept both start_date (frontend) and date (legacy)
+    const date = req.body.start_date ?? req.body.date;
+    const { flowIntensity, notes } = req.body;
 
     const cycle = await cycleService.startPeriod(req.user.id, {
       date,
       flowIntensity,
-      notes
+      notes,
     });
 
     return ApiResponse.created(res, cycle, 'Period started');
@@ -34,11 +36,39 @@ const startPeriod = async (req, res, next) => {
  */
 const endPeriod = async (req, res, next) => {
   try {
-    const { date } = req.body;
+    const date = req.body.end_date ?? req.body.date;
 
     const cycle = await cycleService.endPeriod(req.user.id, { date });
 
     return ApiResponse.success(res, cycle, 'Period ended');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update period start date on current active cycle
+ * PUT /api/v1/cycles/start
+ */
+const updatePeriodStart = async (req, res, next) => {
+  try {
+    const date = req.body.start_date ?? req.body.date;
+    const cycle = await cycleService.updatePeriodStart(req.user.id, { date });
+    return ApiResponse.success(res, cycle, 'Period start date updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update period end date on current active cycle
+ * PUT /api/v1/cycles/end
+ */
+const updatePeriodEnd = async (req, res, next) => {
+  try {
+    const date = req.body.end_date ?? req.body.date;
+    const cycle = await cycleService.updatePeriodEnd(req.user.id, { date });
+    return ApiResponse.success(res, cycle, 'Period end date updated');
   } catch (error) {
     next(error);
   }
@@ -70,7 +100,21 @@ const getCurrentCycle = async (req, res, next) => {
       return ApiResponse.success(res, null, 'No active cycle found');
     }
 
-    return ApiResponse.success(res, cycle);
+    // Add snake_case aliases for frontend compatibility
+    return ApiResponse.success(res, {
+      ...cycle,
+      current_day: cycle.dayOfCycle,
+      cycle_length: cycle.cycleLength,
+      period_length: cycle.periodLength,
+      ovulation_day: cycle.ovulationDay,
+      current_phase: cycle.phase?.name ?? null,
+      days_until_next_period: cycle.predictions?.nextPeriod?.daysUntil ?? null,
+      last_period_start: cycle.startDate ?? null,
+      period_dates: cycle.period_dates ?? [],
+      fertility_window: cycle.fertility_window ?? [],
+      ovulation_date: cycle.ovulation_date ?? null,
+      pregnancy_chance: cycle.pregnancy_chance ?? null,
+    });
   } catch (error) {
     next(error);
   }
@@ -88,7 +132,7 @@ const getCycles = async (req, res, next) => {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       startDate,
-      endDate
+      endDate,
     });
 
     return ApiResponse.paginated(res, result.cycles, result.pagination);
@@ -117,11 +161,7 @@ const getCycleById = async (req, res, next) => {
  */
 const updateCycle = async (req, res, next) => {
   try {
-    const cycle = await cycleService.updateCycle(
-      req.user.id,
-      req.params.cycleId,
-      req.body
-    );
+    const cycle = await cycleService.updateCycle(req.user.id, req.params.cycleId, req.body);
 
     return ApiResponse.success(res, cycle, 'Cycle updated');
   } catch (error) {
@@ -167,15 +207,17 @@ const getAnalytics = async (req, res, next) => {
 
     // Default to last 6 months if no dates provided
     const end = endDate || new Date().toISOString().split('T')[0];
-    const start = startDate || (() => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 6);
-      return d.toISOString().split('T')[0];
-    })();
+    const start =
+      startDate ||
+      (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 6);
+        return d.toISOString().split('T')[0];
+      })();
 
     const analytics = await cycleService.getAnalytics(req.user.id, {
       startDate: start,
-      endDate: end
+      endDate: end,
     });
 
     return ApiResponse.success(res, analytics);
@@ -202,10 +244,59 @@ const getPredictions = async (req, res, next) => {
   }
 };
 
+/**
+ * Get phase date ranges for wheel segments
+ * GET /api/v1/cycles/phases
+ */
+const getPhases = async (req, res, next) => {
+  try {
+    const phases = await cycleService.getPhases(req.user.id);
+    if (!phases) return ApiResponse.success(res, null, 'No cycle data found');
+    return ApiResponse.success(res, phases, 'Cycle phases retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get multi-month period + ovulation forecast
+ * GET /api/v1/cycles/forecast?months=3
+ */
+const getForecast = async (req, res, next) => {
+  try {
+    const months = Math.min(12, Math.max(1, parseInt(req.query.months) || 3));
+    const forecast = await cycleService.getForecast(req.user.id, months);
+    if (!forecast) return ApiResponse.success(res, null, 'No cycle data found');
+    return ApiResponse.success(res, forecast, 'Forecast retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Add log to a specific cycle
+ * POST /api/v1/cycles/:cycleId/logs
+ */
+const addCycleLog = async (req, res, next) => {
+  try {
+    const entry = await cycleService.logDailyEntry(req.user.id, {
+      ...req.body,
+      cycleId: req.params.cycleId,
+    });
+
+    return ApiResponse.success(res, entry, 'Cycle log added');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   startPeriod,
   endPeriod,
+  updatePeriodStart,
+  updatePeriodEnd,
   logDailyEntry,
+  addCycleLog,
   getCurrentCycle,
   getCycles,
   getCycleById,
@@ -213,5 +304,7 @@ module.exports = {
   deleteCycle,
   getDailyLog,
   getAnalytics,
-  getPredictions
+  getPredictions,
+  getPhases,
+  getForecast,
 };

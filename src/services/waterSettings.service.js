@@ -1,6 +1,6 @@
 'use strict';
 
-const { supabaseAdmin } = require('../config/supabase');
+const { pool } = require('../config/database');
 
 const TABLE = 'water_settings';
 
@@ -15,35 +15,36 @@ class WaterSettingsService {
    * Fetch water settings; returns defaults when none exist yet.
    */
   async get(userId) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const result = await pool.query(`SELECT * FROM ${TABLE} WHERE user_id = $1`, [userId]);
 
-    if (error) throw error;
-
-    if (!data) {
+    if (!result.rows[0]) {
       return { user_id: userId, ...DEFAULTS };
     }
-    return data;
+    return result.rows[0];
   }
 
   /**
    * Create or update water settings for the user.
    */
   async upsert(userId, fields) {
-    const { data, error } = await supabaseAdmin
-      .from(TABLE)
-      .upsert(
-        { user_id: userId, ...fields },
-        { onConflict: 'user_id', returning: 'representation' }
-      )
-      .select()
-      .single();
+    const allFields = { user_id: userId, ...fields };
+    const keys = Object.keys(allFields);
+    const values = Object.values(allFields);
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const cols = keys.join(', ');
+    const updates = keys
+      .filter((k) => k !== 'user_id')
+      .map((k) => `${k} = EXCLUDED.${k}`)
+      .join(', ');
 
-    if (error) throw error;
-    return data;
+    const result = await pool.query(
+      `INSERT INTO ${TABLE} (${cols}) VALUES (${placeholders})
+       ON CONFLICT (user_id) DO UPDATE SET ${updates}
+       RETURNING *`,
+      values
+    );
+
+    return result.rows[0];
   }
 }
 

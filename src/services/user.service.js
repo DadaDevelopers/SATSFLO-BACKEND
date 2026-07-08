@@ -5,11 +5,10 @@
  */
 
 const bcrypt = require('bcrypt');
-const { supabaseAdmin, dbConfig } = require('../config/database');
+const { pool } = require('../config/database');
 const Encryption = require('../utils/encryption');
 const logger = require('../utils/logger');
 
-// Fields that should be encrypted in health profile
 const ENCRYPTED_HEALTH_FIELDS = ['health_conditions', 'medications', 'notes'];
 
 class UserService {
@@ -17,25 +16,15 @@ class UserService {
    * Get user profile
    */
   async getProfile(userId) {
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select(`
-        id,
-        email,
-        name,
-        date_of_birth,
-        avatar_url,
-        timezone,
-        language,
-        role,
-        email_verified,
-        created_at,
-        last_login
-      `)
-      .eq('id', userId)
-      .single();
+    const result = await pool.query(
+      `SELECT id, email, name, phone, date_of_birth, avatar_url, timezone, language,
+              role, email_verified, created_at, last_login
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = result.rows[0];
 
-    if (error || !user) {
+    if (!user) {
       const err = new Error('User not found');
       err.statusCode = 404;
       throw err;
@@ -48,51 +37,45 @@ class UserService {
    * Update user profile
    */
   async updateProfile(userId, updates) {
-    const allowedFields = ['name', 'date_of_birth', 'avatar_url', 'timezone', 'language'];
-    const sanitizedUpdates = {};
+    const allowedFields = ['name', 'phone', 'date_of_birth', 'avatar_url', 'timezone', 'language'];
+    const setClauses = [];
+    const values = [];
 
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
-        // Convert camelCase to snake_case
-        const snakeField = field.replace(/([A-Z])/g, '_$1').toLowerCase();
-        sanitizedUpdates[snakeField] = updates[field];
+        values.push(updates[field]);
+        setClauses.push(`${field} = $${values.length}`);
       }
     }
 
-    sanitizedUpdates.updated_at = new Date().toISOString();
-
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update(sanitizedUpdates)
-      .eq('id', userId)
-      .select('id, email, name, date_of_birth, avatar_url, timezone, language')
-      .single();
-
-    if (error) {
-      logger.error('Profile update failed', error);
-      throw error;
+    if (setClauses.length === 0) {
+      return this.getProfile(userId);
     }
 
+    setClauses.push(`updated_at = NOW()`);
+    values.push(userId);
+
+    const result = await pool.query(
+      `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${values.length}
+       RETURNING id, email, name, phone, date_of_birth, avatar_url, timezone, language`,
+      values
+    );
+
     logger.info('Profile updated', { userId });
-    return user;
+    return result.rows[0];
   }
 
   /**
    * Get health profile (with decrypted sensitive fields)
    */
   async getHealthProfile(userId) {
-    const { data: profile, error } = await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    const result = await pool.query('SELECT * FROM health_profiles WHERE user_id = $1', [userId]);
+    const profile = result.rows[0];
 
-    if (error || !profile) {
-      // Create default profile if not exists
+    if (!profile) {
       return this.createHealthProfile(userId);
     }
 
-    // Decrypt sensitive fields
     return this.decryptHealthProfile(profile);
   }
 
@@ -100,30 +83,20 @@ class UserService {
    * Create default health profile
    */
   async createHealthProfile(userId) {
-    const { data: profile, error } = await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .insert({
-        user_id: userId,
-        average_cycle_length: 28,
-        average_period_length: 5,
-        created_at: new Date().toISOString()
-      })
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('Health profile creation failed', error);
-      throw error;
-    }
-
-    return profile;
+    const result = await pool.query(
+      `INSERT INTO health_profiles (user_id, average_cycle_length, average_period_length, created_at)
+       VALUES ($1, 28, 5, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
+       RETURNING *`,
+      [userId]
+    );
+    return result.rows[0];
   }
 
   /**
    * Update health profile (with encryption for sensitive fields)
    */
   async updateHealthProfile(userId, updates) {
-    // Ensure profile exists
     await this.getHealthProfile(userId);
 
     const allowedFields = [
@@ -135,40 +108,40 @@ class UserService {
       'last_period_date',
       'is_pregnant',
       'is_trying_to_conceive',
-      'notes'
+      'notes',
     ];
 
-    const sanitizedUpdates = {};
+    const setClauses = [];
+    const values = [];
 
     for (const [key, value] of Object.entries(updates)) {
       const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
       if (allowedFields.includes(snakeKey) && value !== undefined) {
-        // Encrypt sensitive fields
         if (ENCRYPTED_HEALTH_FIELDS.includes(snakeKey)) {
           const valueToEncrypt = typeof value === 'object' ? JSON.stringify(value) : value;
-          sanitizedUpdates[snakeKey] = Encryption.encrypt(valueToEncrypt);
+          values.push(Encryption.encrypt(valueToEncrypt));
         } else {
-          sanitizedUpdates[snakeKey] = value;
+          values.push(value);
         }
+        setClauses.push(`${snakeKey} = $${values.length}`);
       }
     }
 
-    sanitizedUpdates.updated_at = new Date().toISOString();
-
-    const { data: profile, error } = await supabaseAdmin
-      .from(dbConfig.tables.HEALTH_PROFILES)
-      .update(sanitizedUpdates)
-      .eq('user_id', userId)
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('Health profile update failed', error);
-      throw error;
+    if (setClauses.length === 0) {
+      return this.getHealthProfile(userId);
     }
 
+    setClauses.push(`updated_at = NOW()`);
+    values.push(userId);
+
+    const result = await pool.query(
+      `UPDATE health_profiles SET ${setClauses.join(', ')} WHERE user_id = $${values.length}
+       RETURNING *`,
+      values
+    );
+
     logger.info('Health profile updated', { userId });
-    return this.decryptHealthProfile(profile);
+    return this.decryptHealthProfile(result.rows[0]);
   }
 
   /**
@@ -181,7 +154,6 @@ class UserService {
       if (decrypted[field]) {
         try {
           const decryptedValue = Encryption.decrypt(decrypted[field]);
-          // Try to parse JSON for array fields
           try {
             decrypted[field] = JSON.parse(decryptedValue);
           } catch {
@@ -199,89 +171,104 @@ class UserService {
 
   /**
    * Get user preferences
+   * Returns the reminders sub-object in the exact shape the frontend expects.
    */
   async getPreferences(userId) {
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('preferences')
-      .eq('id', userId)
-      .single();
+    const result = await pool.query('SELECT preferences FROM users WHERE id = $1', [userId]);
+    const user = result.rows[0];
 
-    if (error || !user) {
+    if (!user) {
       const err = new Error('User not found');
       err.statusCode = 404;
       throw err;
     }
 
-    // Return default preferences if none set
-    return user.preferences || this.getDefaultPreferences();
+    const prefs = user.preferences || {};
+    return this.formatPreferences(prefs);
   }
 
   /**
-   * Update user preferences
+   * Update user preferences.
+   * Accepts { reminders: { periodStarts, periodEnds, fertility, ovulation, medicine } }
+   * and deep-merges into the stored JSONB.
    */
-  async updatePreferences(userId, preferences) {
-    // Get current preferences
-    const currentPrefs = await this.getPreferences(userId);
+  async updatePreferences(userId, incoming) {
+    const currentPrefs = await pool.query('SELECT preferences FROM users WHERE id = $1', [userId]);
+    const stored = currentPrefs.rows[0]?.preferences || {};
 
-    // Merge with new preferences
-    const mergedPreferences = {
-      ...currentPrefs,
-      ...preferences,
-      notifications: {
-        ...currentPrefs.notifications,
-        ...(preferences.notifications || {})
-      }
+    // Merge reminders key
+    const merged = {
+      ...stored,
     };
-
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({
-        preferences: mergedPreferences,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId)
-      .select('preferences')
-      .single();
-
-    if (error) {
-      logger.error('Preferences update failed', error);
-      throw error;
+    if (incoming.reminders) {
+      merged.reminders = {
+        ...(stored.reminders || this.defaultReminders()),
+        ...incoming.reminders,
+      };
+    }
+    // Allow other top-level keys to pass through (theme, units, etc.)
+    for (const key of Object.keys(incoming)) {
+      if (key !== 'reminders') merged[key] = incoming[key];
     }
 
+    const result = await pool.query(
+      `UPDATE users SET preferences = $1, updated_at = NOW() WHERE id = $2
+       RETURNING preferences`,
+      [merged, userId]
+    );
+
     logger.info('Preferences updated', { userId });
-    return user.preferences;
+    return this.formatPreferences(result.rows[0].preferences);
   }
 
   /**
-   * Get default preferences
+   * Default reminder toggles
    */
-  getDefaultPreferences() {
+  defaultReminders() {
     return {
-      notifications: {
-        periodReminder: true,
-        ovulationReminder: true,
-        pillReminder: false,
-        dailyLogReminder: false,
-        communityUpdates: true
-      },
-      reminderTime: '09:00',
-      privacy: 'private',
-      theme: 'system',
-      units: 'metric'
+      periodStarts: true,
+      periodEnds: true,
+      fertility: false,
+      ovulation: false,
+      medicine: false,
     };
   }
 
   /**
-   * Delete user account
+   * Format raw JSONB preferences into the shape the frontend expects
+   */
+  formatPreferences(prefs) {
+    return {
+      reminders: {
+        ...this.defaultReminders(),
+        ...(prefs.reminders || {}),
+      },
+    };
+  }
+
+  /**
+   * Store avatar (base64 data URL or remote URL) in avatar_url column
+   */
+  async updateAvatar(userId, avatarData) {
+    const result = await pool.query(
+      `UPDATE users SET avatar_url = $1, updated_at = NOW()
+       WHERE id = $2 RETURNING id, avatar_url`,
+      [avatarData, userId]
+    );
+    if (!result.rows[0]) {
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    return result.rows[0];
+  }
+
+  /**
+   * Delete user account (soft delete)
    */
   async deleteAccount(userId, password) {
-    // Verify password
-    const { data: user } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
+    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const user = result.rows[0];
 
     if (!user) {
       const error = new Error('User not found');
@@ -296,22 +283,14 @@ class UserService {
       throw error;
     }
 
-    // Soft delete - mark as deleted
-    await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .update({
-        status: 'deleted',
-        email: `deleted_${userId}@deleted.local`,
-        name: 'Deleted User',
-        deleted_at: new Date().toISOString()
-      })
-      .eq('id', userId);
+    await pool.query(
+      `UPDATE users
+       SET status = 'deleted', email = $1, name = 'Deleted User', deleted_at = NOW()
+       WHERE id = $2`,
+      [`deleted_${userId}@deleted.local`, userId]
+    );
 
-    // Revoke all refresh tokens
-    await supabaseAdmin
-      .from(dbConfig.tables.REFRESH_TOKENS)
-      .update({ revoked: true })
-      .eq('user_id', userId);
+    await pool.query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
 
     logger.info('Account deleted', { userId });
     return { message: 'Account deleted successfully' };
@@ -321,47 +300,26 @@ class UserService {
    * Export user data (GDPR compliance)
    */
   async exportUserData(userId) {
-    const [
-      { data: user },
-      { data: healthProfile },
-      { data: cycles },
-      { data: symptoms },
-      { data: moods }
-    ] = await Promise.all([
-      supabaseAdmin
-        .from(dbConfig.tables.USERS)
-        .select('id, email, name, date_of_birth, timezone, language, created_at')
-        .eq('id', userId)
-        .single(),
-      supabaseAdmin
-        .from(dbConfig.tables.HEALTH_PROFILES)
-        .select('*')
-        .eq('user_id', userId)
-        .single(),
-      supabaseAdmin
-        .from(dbConfig.tables.CYCLES)
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_date', { ascending: false }),
-      supabaseAdmin
-        .from(dbConfig.tables.SYMPTOMS)
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false }),
-      supabaseAdmin
-        .from(dbConfig.tables.MOODS)
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-    ]);
+    const [userResult, healthResult, cyclesResult, symptomsResult, moodsResult] = await Promise.all(
+      [
+        pool.query(
+          'SELECT id, email, name, date_of_birth, timezone, language, created_at FROM users WHERE id = $1',
+          [userId]
+        ),
+        pool.query('SELECT * FROM health_profiles WHERE user_id = $1', [userId]),
+        pool.query('SELECT * FROM cycles WHERE user_id = $1 ORDER BY start_date DESC', [userId]),
+        pool.query('SELECT * FROM symptoms WHERE user_id = $1 ORDER BY date DESC', [userId]),
+        pool.query('SELECT * FROM moods WHERE user_id = $1 ORDER BY date DESC', [userId]),
+      ]
+    );
 
     return {
       exportDate: new Date().toISOString(),
-      user,
-      healthProfile: healthProfile ? this.decryptHealthProfile(healthProfile) : null,
-      cycles: cycles || [],
-      symptoms: symptoms || [],
-      moods: moods || []
+      user: userResult.rows[0],
+      healthProfile: healthResult.rows[0] ? this.decryptHealthProfile(healthResult.rows[0]) : null,
+      cycles: cyclesResult.rows,
+      symptoms: symptomsResult.rows,
+      moods: moodsResult.rows,
     };
   }
 
@@ -369,13 +327,14 @@ class UserService {
    * Get user by ID (admin)
    */
   async getUserById(userId) {
-    const { data: user, error } = await supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, role, status, email_verified, created_at, last_login')
-      .eq('id', userId)
-      .single();
+    const result = await pool.query(
+      `SELECT id, email, name, role, status, email_verified, created_at, last_login
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = result.rows[0];
 
-    if (error || !user) {
+    if (!user) {
       const err = new Error('User not found');
       err.statusCode = 404;
       throw err;
@@ -385,32 +344,46 @@ class UserService {
   }
 
   /**
+   * Save / update FCM device token
+   */
+  async saveDeviceToken(userId, token, platform) {
+    await pool.query(
+      `UPDATE users SET fcm_token = $1, fcm_platform = $2, updated_at = NOW() WHERE id = $3`,
+      [token, platform, userId]
+    );
+  }
+
+  /**
    * Search users (admin)
    */
   async searchUsers({ query, page = 1, limit = 20 }) {
     const offset = (page - 1) * limit;
-
-    let queryBuilder = supabaseAdmin
-      .from(dbConfig.tables.USERS)
-      .select('id, email, name, role, status, created_at', { count: 'exact' });
+    const values = [];
+    let whereClause = '';
 
     if (query) {
-      queryBuilder = queryBuilder.or(`email.ilike.%${query}%,name.ilike.%${query}%`);
+      values.push(`%${query}%`);
+      whereClause = `WHERE (email ILIKE $1 OR name ILIKE $1)`;
     }
 
-    const { data: users, count, error } = await queryBuilder
-      .range(offset, offset + limit - 1)
-      .order('created_at', { ascending: false });
+    const countResult = await pool.query(`SELECT COUNT(*) FROM users ${whereClause}`, values);
 
-    if (error) throw error;
+    const dataValues = [...values, limit, offset];
+    const result = await pool.query(
+      `SELECT id, email, name, role, status, created_at
+       FROM users ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      dataValues
+    );
 
     return {
-      users,
+      users: result.rows,
       pagination: {
         page,
         limit,
-        total: count
-      }
+        total: parseInt(countResult.rows[0].count),
+      },
     };
   }
 }

@@ -19,26 +19,41 @@ const updateProfileValidation = [
     .matches(/^[a-zA-Z\s'-]+$/)
     .withMessage('Name can only contain letters, spaces, hyphens, and apostrophes'),
 
-  body('dateOfBirth')
-    .optional()
-    .isISO8601()
-    .withMessage('Date of birth must be a valid date'),
+  body('dateOfBirth').optional().isISO8601().withMessage('Date of birth must be a valid date'),
 
-  body('timezone')
-    .optional()
-    .isString()
-    .isLength({ max: 50 })
-    .withMessage('Invalid timezone'),
+  body('timezone').optional().isString().isLength({ max: 50 }).withMessage('Invalid timezone'),
 
   body('language')
     .optional()
-    .isIn(['en', 'sw', 'fr', 'es', 'pt'])
+    .isIn([
+      'English',
+      'Spanish',
+      'Swahili',
+      'Arabic',
+      'Hindi',
+      'French',
+      'German',
+      'Russian',
+      'Mandarin',
+      'Portuguese',
+      'Indonesia',
+      'Urdu',
+      // legacy ISO codes
+      'en',
+      'sw',
+      'fr',
+      'es',
+      'pt',
+    ])
     .withMessage('Unsupported language'),
 
-  body('avatarUrl')
+  body('avatarUrl').optional().isURL().withMessage('Avatar must be a valid URL'),
+
+  body('phone')
     .optional()
-    .isURL()
-    .withMessage('Avatar must be a valid URL')
+    .trim()
+    .matches(/^\+?[0-9\s\-().]{7,20}$/)
+    .withMessage('Invalid phone number format'),
 ];
 
 /**
@@ -61,10 +76,7 @@ const updateHealthProfileValidation = [
     .isLength({ max: 100 })
     .withMessage('Birth control method must not exceed 100 characters'),
 
-  body('healthConditions')
-    .optional()
-    .isArray()
-    .withMessage('Health conditions must be an array'),
+  body('healthConditions').optional().isArray().withMessage('Health conditions must be an array'),
 
   body('healthConditions.*')
     .optional()
@@ -72,10 +84,7 @@ const updateHealthProfileValidation = [
     .isLength({ max: 100 })
     .withMessage('Each health condition must not exceed 100 characters'),
 
-  body('medications')
-    .optional()
-    .isArray()
-    .withMessage('Medications must be an array'),
+  body('medications').optional().isArray().withMessage('Medications must be an array'),
 
   body('medications.*')
     .optional()
@@ -94,80 +103,38 @@ const updateHealthProfileValidation = [
       return true;
     }),
 
-  body('isPregnant')
-    .optional()
-    .isBoolean()
-    .withMessage('isPregnant must be a boolean'),
+  body('isPregnant').optional().isBoolean().withMessage('isPregnant must be a boolean'),
 
   body('isTryingToConceive')
     .optional()
     .isBoolean()
-    .withMessage('isTryingToConceive must be a boolean')
+    .withMessage('isTryingToConceive must be a boolean'),
 ];
 
 /**
  * Update preferences validation
  */
 const updatePreferencesValidation = [
-  body('notifications')
-    .optional()
-    .isObject()
-    .withMessage('Notifications must be an object'),
+  body('reminders').optional().isObject().withMessage('reminders must be an object'),
 
-  body('notifications.periodReminder')
+  body('reminders.periodStarts')
     .optional()
     .isBoolean()
-    .withMessage('Period reminder must be a boolean'),
+    .withMessage('periodStarts must be a boolean'),
 
-  body('notifications.ovulationReminder')
-    .optional()
-    .isBoolean()
-    .withMessage('Ovulation reminder must be a boolean'),
+  body('reminders.periodEnds').optional().isBoolean().withMessage('periodEnds must be a boolean'),
 
-  body('notifications.pillReminder')
-    .optional()
-    .isBoolean()
-    .withMessage('Pill reminder must be a boolean'),
+  body('reminders.fertility').optional().isBoolean().withMessage('fertility must be a boolean'),
 
-  body('notifications.dailyLogReminder')
-    .optional()
-    .isBoolean()
-    .withMessage('Daily log reminder must be a boolean'),
+  body('reminders.ovulation').optional().isBoolean().withMessage('ovulation must be a boolean'),
 
-  body('notifications.communityUpdates')
-    .optional()
-    .isBoolean()
-    .withMessage('Community updates must be a boolean'),
-
-  body('reminderTime')
-    .optional()
-    .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-    .withMessage('Reminder time must be in HH:MM format'),
-
-  body('privacy')
-    .optional()
-    .isIn(Object.values(PRIVACY_LEVELS))
-    .withMessage('Invalid privacy level'),
-
-  body('theme')
-    .optional()
-    .isIn(['light', 'dark', 'system'])
-    .withMessage('Theme must be light, dark, or system'),
-
-  body('units')
-    .optional()
-    .isIn(['metric', 'imperial'])
-    .withMessage('Units must be metric or imperial')
+  body('reminders.medicine').optional().isBoolean().withMessage('medicine must be a boolean'),
 ];
 
 /**
  * User ID parameter validation
  */
-const userIdParamValidation = [
-  param('userId')
-    .isUUID()
-    .withMessage('Invalid user ID format')
-];
+const userIdParamValidation = [param('userId').isUUID().withMessage('Invalid user ID format')];
 
 /**
  * Search users validation
@@ -179,28 +146,19 @@ const searchUsersValidation = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Search query must be between 2 and 100 characters'),
 
-  query('page')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer'),
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
 
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100')
+    .withMessage('Limit must be between 1 and 100'),
 ];
 
 /**
  * Delete account validation
  */
 const deleteAccountValidation = [
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required to delete account'),
-
-  body('confirmation')
-    .equals('DELETE')
-    .withMessage('Please type DELETE to confirm account deletion')
+  body('password').notEmpty().withMessage('Password is required to delete account'),
 ];
 
 module.exports = {
@@ -209,5 +167,5 @@ module.exports = {
   updatePreferencesValidation,
   userIdParamValidation,
   searchUsersValidation,
-  deleteAccountValidation
+  deleteAccountValidation,
 };

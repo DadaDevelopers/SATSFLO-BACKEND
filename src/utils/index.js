@@ -13,5 +13,5 @@ module.exports = {
   logger,
   Encryption,
   ApiResponse,
-  ...constants
+  ...constants,
 };

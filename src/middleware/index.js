@@ -11,7 +11,7 @@ const {
   authLimiter,
   passwordResetLimiter,
   sensitiveDataLimiter,
-  registrationLimiter
+  registrationLimiter,
 } = require('./rateLimiter');
 const { validate, sanitizeBody } = require('./validator');
 
@@ -35,5 +35,5 @@ module.exports = {
 
   // Validation
   validate,
-  sanitizeBody
+  sanitizeBody,
 };

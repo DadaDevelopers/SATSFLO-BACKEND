@@ -7,6 +7,7 @@
 const userService = require('../../services/user.service');
 const ApiResponse = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { uploadBuffer } = require('../../config/cloudinary');
 
 /**
  * Get current user profile
@@ -87,6 +88,35 @@ const updatePreferences = async (req, res, next) => {
 };
 
 /**
+ * Upload avatar
+ * POST /api/v1/users/avatar          — JSON body { avatar: base64string|url }
+ * POST /api/v1/users/profile/avatar  — multipart/form-data { file } OR JSON { avatar }
+ */
+const uploadAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return ApiResponse.validationError(res, [
+        {
+          field: 'file',
+          message: 'Provide an image file (multipart/form-data with field "file")',
+        },
+      ]);
+    }
+
+    const uploaded = await uploadBuffer(req.file.buffer, {
+      folder: 'satsflo/avatars',
+      transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }],
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    });
+
+    const result = await userService.updateAvatar(req.user.id, uploaded.secure_url);
+    return ApiResponse.success(res, { avatar_url: result.avatar_url }, 'Avatar updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Delete account
  * DELETE /api/v1/users/account
  */
@@ -108,6 +138,28 @@ const exportData = async (req, res, next) => {
   try {
     const data = await userService.exportUserData(req.user.id);
     return ApiResponse.success(res, data, 'Data export generated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Save FCM device token
+ * POST /api/v1/users/device-token
+ */
+const saveDeviceToken = async (req, res, next) => {
+  try {
+    const { token, platform } = req.body;
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return ApiResponse.validationError(res, [{ field: 'token', message: 'token is required' }]);
+    }
+    if (!platform || !['ios', 'android'].includes(platform)) {
+      return ApiResponse.validationError(res, [
+        { field: 'platform', message: 'platform must be ios or android' },
+      ]);
+    }
+    await userService.saveDeviceToken(req.user.id, token.trim(), platform);
+    return ApiResponse.success(res, null, 'Device token saved');
   } catch (error) {
     next(error);
   }
@@ -138,7 +190,7 @@ const searchUsers = async (req, res, next) => {
     const result = await userService.searchUsers({
       query: q,
       page: parseInt(page) || 1,
-      limit: parseInt(limit) || 20
+      limit: parseInt(limit) || 20,
     });
     return ApiResponse.paginated(res, result.users, result.pagination);
   } catch (error) {
@@ -149,12 +201,14 @@ const searchUsers = async (req, res, next) => {
 module.exports = {
   getProfile,
   updateProfile,
+  uploadAvatar,
   getHealthProfile,
   updateHealthProfile,
   getPreferences,
   updatePreferences,
+  saveDeviceToken,
   deleteAccount,
   exportData,
   getUserById,
-  searchUsers
+  searchUsers,
 };

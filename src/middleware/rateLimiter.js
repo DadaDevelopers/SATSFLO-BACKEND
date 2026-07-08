@@ -7,10 +7,16 @@
 const rateLimit = require('express-rate-limit');
 const ApiResponse = require('../utils/response');
 
+const API_VERSION = process.env.API_VERSION || 'v1';
+const API_HEALTH_PATH = `/${API_VERSION}/health`;
+const API_HEALTH_ORIGINAL_PATH = `/api/${API_VERSION}/health`;
+
 /**
  * General API rate limiter
  * Applied to all routes
  */
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 const apiLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || '15') * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
@@ -21,9 +27,13 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/v1/health';
-  }
+    if (skipInTest()) return true;
+    return (
+      req.path === '/health' ||
+      req.path === API_HEALTH_PATH ||
+      req.originalUrl === API_HEALTH_ORIGINAL_PATH
+    );
+  },
 });
 
 /**
@@ -31,9 +41,10 @@ const apiLimiter = rateLimit({
  * Prevents brute force login attempts
  */
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   skipSuccessfulRequests: true,
+  skip: skipInTest,
   message: 'Too many authentication attempts',
   handler: (req, res) => {
     ApiResponse.error(
@@ -41,7 +52,7 @@ const authLimiter = rateLimit({
       'Too many authentication attempts. Please try again in 15 minutes.',
       429
     );
-  }
+  },
 });
 
 /**
@@ -49,16 +60,13 @@ const authLimiter = rateLimit({
  * Prevents email bombing
  */
 const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 attempts per hour
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  skip: skipInTest,
   message: 'Too many password reset attempts',
   handler: (req, res) => {
-    ApiResponse.error(
-      res,
-      'Too many password reset attempts. Please try again in an hour.',
-      429
-    );
-  }
+    ApiResponse.error(res, 'Too many password reset attempts. Please try again in an hour.', 429);
+  },
 });
 
 /**
@@ -66,12 +74,13 @@ const passwordResetLimiter = rateLimit({
  * For endpoints returning encrypted health data
  */
 const sensitiveDataLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute
+  windowMs: 1 * 60 * 1000,
+  max: 30,
+  skip: skipInTest,
   message: 'Too many requests for sensitive data',
   handler: (req, res) => {
     ApiResponse.error(res, 'Please slow down your requests.', 429);
-  }
+  },
 });
 
 /**
@@ -79,16 +88,31 @@ const sensitiveDataLimiter = rateLimit({
  * Prevents mass account creation
  */
 const registrationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // 5 accounts per hour per IP
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skip: skipInTest,
   message: 'Too many accounts created',
+  handler: (req, res) => {
+    ApiResponse.error(res, 'Too many accounts created from this IP. Please try again later.', 429);
+  },
+});
+
+/**
+ * Resend verification limiter
+ * Prevents email bombing via the resend endpoint
+ */
+const resendVerificationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  skip: skipInTest,
+  message: 'Too many verification email requests',
   handler: (req, res) => {
     ApiResponse.error(
       res,
-      'Too many accounts created from this IP. Please try again later.',
+      'Too many verification email requests. Please try again in an hour.',
       429
     );
-  }
+  },
 });
 
 module.exports = {
@@ -96,5 +120,6 @@ module.exports = {
   authLimiter,
   passwordResetLimiter,
   sensitiveDataLimiter,
-  registrationLimiter
+  registrationLimiter,
+  resendVerificationLimiter,
 };
