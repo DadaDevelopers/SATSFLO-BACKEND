@@ -34,15 +34,13 @@ Set these in the Render dashboard → Environment.
 | `API_BASE_URL` | `https://satsflo-backend.onrender.com/api/v1` | |
 | `VERIFICATION_BASE_URL` | `https://satsflo-backend.onrender.com/api/v1` | base for email verification links |
 
-### Optional — Lightning (Blink)
+### Optional — Payments
 
 | Variable | Notes |
 |----------|-------|
-| `BLINK_API_KEY` | required for Lightning wallet features |
-| `BLINK_BTC_WALLET_ID` | required for Lightning wallet features |
-| `BLINK_API_URL` | default: `https://api.blink.sv/graphql` |
-| `BLINK_API_TIMEOUT_MS` | default: `10000` |
-| `WEBHOOK_SECRET` | validates `x-webhook-secret` header on `/payments/webhook` |
+| `WEBHOOK_SECRET` | validates `x-webhook-secret` header on `POST /payments/webhook`; leave unset in dev |
+
+> **Blink env vars** (`BLINK_API_KEY`, `BLINK_BTC_WALLET_ID`, etc.) exist in the codebase for a future in-app wallet feature. They are not needed for the current LNURL-pay tip flow and should not be set in v1.
 
 ### Optional — File Uploads (Cloudinary)
 
