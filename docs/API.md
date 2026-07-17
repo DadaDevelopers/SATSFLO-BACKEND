@@ -639,42 +639,16 @@ Partner's period dates and fertility window (respects sharing settings).
 
 ## Payments — `/payments`
 
-See [PAYMENTS.md](./PAYMENTS.md) for the full flow.
+See [docs/PAYMENTS.md](./docs/PAYMENTS.md) for the full flow explanation.
+
+SatsFlo uses peer-to-peer Lightning tipping via LNURL-pay and BOLT11 — no third-party wallet API. The user pays from their own Lightning wallet; SatsFlo only fetches invoices and records status.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | /payments/validate | Yes | Validate lightning address / LNURL |
-| POST | /payments/tip | Yes | Create tip, get BOLT11 invoice |
-| POST | /payments/confirm | Yes | Optimistic payment confirmation |
+| POST | /payments/validate | Yes | Validate lightning address / LNURL, get min/max sats |
+| POST | /payments/tip | Yes | Fetch BOLT11 invoice from recipient's LNURL endpoint |
+| POST | /payments/confirm | Yes | Optimistic confirmation (sender-initiated) |
 | GET | /payments/status/:paymentHash | Yes | Payment status |
-| GET | /payments/history | Yes | `?type=sent\|received` |
-| GET | /payments/btc-price | Yes | Current BTC/USD price |
-| POST | /payments/webhook | No | Provider webhook (requires `x-webhook-secret` header) |
-
----
-
-## Lightning — `/lightning`
-
-See [PAYMENTS.md](./PAYMENTS.md) for the full flow.
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /lightning/wallet | Yes | Get / sync Blink wallet |
-| POST | /lightning/wallet/sync | Yes | Force wallet sync |
-| POST | /lightning/invoices | Yes | Create incoming invoice |
-| POST | /lightning/payments/probe | Yes | Estimate fee (read-only) |
-| POST | /lightning/payments/pay | Yes | Pay BOLT11 invoice |
-| POST | /lightning/payments/preview | Yes | Preview payment (all methods) |
-| POST | /lightning/payments/lnurl | Yes | Pay via LNURL |
-| POST | /lightning/payments/ln-address | Yes | Pay via Lightning address |
-| GET | /lightning/transactions | Yes | `?page=&limit=` — tx history |
-| GET | /lightning/proof-of-payment | Yes | `?paymentRequest=&limit=` |
-
----
-
-## Wallet — `/wallet`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /wallet/lightning | Get saved lightning address |
-| PUT | /wallet/lightning | `{ lightning_address: "user@domain" }` |
+| GET | /payments/history | Yes | `?type=sent\|received` — last 50 |
+| GET | /payments/btc-price | Yes | Current BTC/USD rate |
+| POST | /payments/webhook | No | Async confirmation from payment processor (requires `x-webhook-secret`) |

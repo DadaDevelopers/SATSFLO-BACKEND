@@ -11,7 +11,7 @@ REST API for SatsFlo — a menstrual health tracking app with Bitcoin Lightning 
 | Database | PostgreSQL 15 via `pg` pool |
 | Auth | JWT (access + refresh) + Google OAuth |
 | Email | Resend SDK (HTTP — SMTP blocked on Render) |
-| Lightning | Blink GraphQL API |
+| Lightning | LNURL-pay + BOLT11 (peer-to-peer, no third-party wallet API) |
 | File Uploads | Cloudinary |
 | Migrations | node-pg-migrate |
 | Tests | Jest + Supertest |
@@ -98,9 +98,9 @@ Returns database connectivity status and uptime.
 
 | Doc | Contents |
 |-----|----------|
-| [API.md](./API.md) | All endpoints, request/response shapes |
-| [PAYMENTS.md](./PAYMENTS.md) | Lightning payment flow in detail |
-| [TESTING.md](./TESTING.md) | Test suite, how to run, what's covered |
+| [docs/API.md](./docs/API.md) | All endpoints, request/response shapes |
+| [docs/PAYMENTS.md](./docs/PAYMENTS.md) | Lightning payment flow in detail |
+| [docs/TESTING.md](./docs/TESTING.md) | Test suite, how to run, what's covered |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System design, DB schema, request lifecycle |
 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Render setup, env vars, migrations |
 | [docs/SECURITY.md](./docs/SECURITY.md) | Auth flow, rate limiting, security headers |

@@ -1,46 +1,39 @@
-# Lightning Payment Flow
+# Payment Flow
 
-SatsFlo has two parallel Lightning payment systems. They are independent and serve different purposes.
+SatsFlo currently implements peer-to-peer Lightning tipping — no third-party wallet API, no fund custody. Users tip each other using their own Lightning wallets via the LNURL-pay standard.
 
----
-
-## System Overview
-
-| System | Table | Use case | Architecture |
-|--------|-------|----------|-------------|
-| **Tips** | `gift_transactions` | User-to-user appreciation tips on threads | Peer-to-peer via LNURL-pay |
-| **Blink Wallets** | `lightning_wallets`, `lightning_transactions` | Full Lightning wallet (send/receive any payment) | Custodial on Blink |
+> **Future scope:** A full in-app Lightning wallet (custodial, via Blink or similar) is planned for a later version when SatsFlo becomes a wallet product. The database schema (`lightning_wallets`, `lightning_transactions`) and service stubs (`lightning.service.js`, `blink.service.js`) are already in the codebase but are **not wired up to any active frontend**. Do not build on them yet.
 
 ---
 
-## System 1 — Tips (LNURL-pay)
-
-Tips let any SatsFlo user send sats to another user (or an external Lightning address) as appreciation for a community thread post.
-
-### Flow
+## How It Works
 
 ```
-POST /payments/validate  →  resolve recipient's LNURL endpoint, get min/max sats
+POST /payments/validate  →  resolve recipient's Lightning address / LNURL, get min/max sats
 POST /payments/tip       →  fetch BOLT11 invoice from recipient's LNURL callback
                          ←  { bolt11_invoice, payment_hash, expires_at }
-[user pays invoice in their own wallet]
-POST /payments/confirm   →  optimistic confirmation (sender-initiated)
-POST /payments/webhook   →  server-side confirmation (from payment processor)
+[user pays invoice in their own Lightning wallet — SatsFlo never touches funds]
+POST /payments/confirm   →  sender tells us the payment went through (optimistic)
+POST /payments/webhook   →  OR the payment processor tells us (async confirmation)
 ```
 
-### Step-by-step
+SatsFlo's backend only fetches invoices and records status. It never holds or routes sats.
 
-#### 1. Validate the recipient address
+---
+
+## Step-by-step
+
+### 1. Validate the recipient address
 
 ```
 POST /api/v1/payments/validate
-Body: { lightning_address: "alice@getalby.com" }
-      { lightning_address: "LNURL1DP68..." }
+Body: { "lightning_address": "alice@getalby.com" }
+  OR  { "lightning_address": "LNURL1DP68..." }
 ```
 
 - Lightning address (`user@domain`) → converted to `https://domain/.well-known/lnurlp/user`
-- LNURL bech32 → decoded to a URL (custom bech32 decoder, no external lib)
-- `GET` that URL → validates `tag === "payRequest"`, extracts `minSendable`, `maxSendable`
+- LNURL bech32 → decoded to a URL using a custom bech32 decoder (no external lib)
+- `GET {url}` → validates `tag === "payRequest"`, extracts sendable range
 
 Returns:
 ```json
@@ -49,27 +42,28 @@ Returns:
   "min_sats": 1,
   "max_sats": 500000,
   "comment_allowed": 140,
-  "description": "..."
+  "description": "Tips for Alice"
 }
 ```
 
-#### 2. Create the tip (fetch invoice)
+### 2. Create the tip — fetch a BOLT11 invoice
 
 ```
 POST /api/v1/payments/tip
 Body: {
-  "recipient_id": "<uuid>",        // SatsFlo user
-  "lightning_address": "...",      // OR external address (recipient_id not needed)
+  "recipient_id": "<uuid>",          // SatsFlo user (optional if lightning_address given)
+  "lightning_address": "...",        // OR external address
   "amount_sats": 100,
-  "thread_id": "<uuid>",           // optional, links tip to thread
-  "note": "Great post!"            // optional, sent as LNURL comment
+  "thread_id": "<uuid>",             // optional — links tip to a community thread
+  "note": "Great post!"              // optional — sent as LNURL comment
 }
 ```
 
-- Validates `amount_sats` is within `[min_sats, max_sats]`
-- Calls `GET {callback}?amount={msats}&comment={note}`
-- Extracts the BOLT11 invoice from the response
-- Stores in `gift_transactions` with `status = 'pending'`, expires in 10 minutes
+What happens:
+1. Validates `amount_sats` is within `[min_sats, max_sats]`
+2. Calls `GET {callback}?amount={msats}&comment={note}` on the recipient's LNURL endpoint
+3. Extracts the BOLT11 invoice (`pr`) from the response
+4. Inserts a `gift_transactions` row — `status = 'pending'`, expires in **10 minutes**
 
 Returns:
 ```json
@@ -83,22 +77,22 @@ Returns:
 }
 ```
 
-#### 3. User pays the invoice
+### 3. User pays the invoice
 
-The client app hands the `bolt11_invoice` to the user's own Lightning wallet (e.g. via deep-link or display as QR). SatsFlo does **not** initiate the payment — it is peer-to-peer.
+The frontend displays the `bolt11_invoice` as a QR code or passes it to a deep-link handler so the user's own wallet app opens and pays it. SatsFlo does not initiate or route the payment.
 
-#### 4. Confirm payment
+### 4. Confirm the payment
 
-Two paths run in parallel:
+Two independent paths — whichever fires first wins:
 
 **Path A — Optimistic (sender-initiated)**
 ```
 POST /api/v1/payments/confirm
-Body: { "payment_hash": "abc123..." }
 Authorization: Bearer <sender's token>
+Body: { "payment_hash": "abc123..." }
 ```
-- Matches `payment_hash` AND `sender_id` (scoped to prevent abuse)
-- Marks `status = 'completed'`
+- The WHERE clause includes `sender_id = $2` — a sender can only confirm their own tip
+- Sets `status = 'completed'`
 - Returns 409 if already confirmed, 410 if expired
 
 **Path B — Webhook (provider-initiated)**
@@ -107,149 +101,29 @@ POST /api/v1/payments/webhook
 Headers: { "x-webhook-secret": "<WEBHOOK_SECRET>" }
 Body: { "payment_hash": "abc123..." }
 ```
-- No user auth required
-- Validates `x-webhook-secret` header (only if `WEBHOOK_SECRET` env var is set)
-- Marks `status = 'completed'`
+- No user auth — called by the payment processor
+- Validates the `x-webhook-secret` header (only enforced if `WEBHOOK_SECRET` env var is set)
+- Sets `status = 'completed'`
 
-#### Status transitions
+### Status transitions
 
 ```
 pending  →  completed   (confirm or webhook)
-pending  →  failed      (auto-expiry — getStatus() checks expires_at)
+pending  →  failed      (auto-expiry — getStatus() checks expires_at on read)
 ```
-
-### Payment status & history
-
-```
-GET /api/v1/payments/status/:paymentHash   → current status
-GET /api/v1/payments/history?type=sent     → sent tips (last 50)
-GET /api/v1/payments/history?type=received → received tips (last 50)
-```
-
-Tips where the recipient is an external address have `receiver_id = null` — these still appear in the sender's history with the `lightning_address` field set.
 
 ---
 
-## System 2 — Blink Wallet Integration
-
-For users who want a full Lightning wallet managed through SatsFlo. Backed by [Blink](https://blink.sv) (Galoy).
-
-### Architecture
+## Other Endpoints
 
 ```
-React Native App
-      │
-      ▼
-SatsFlo Backend  ──────────────────────────►  Blink GraphQL API
-      │                                              │
-      │  sync wallet state                           │  holds BTC balance
-      │  store tx history                            │  routes payments
-      ▼                                              ▼
-PostgreSQL                                   Lightning Network
-(lightning_wallets, lightning_transactions)
+GET /api/v1/payments/status/:paymentHash   → { status, amount_sats, expires_at, ... }
+GET /api/v1/payments/history?type=sent     → last 50 sent tips
+GET /api/v1/payments/history?type=received → last 50 received tips
+GET /api/v1/payments/btc-price             → current BTC/USD rate
 ```
 
-SatsFlo is a stateless proxy — it never holds funds. Blink holds the user's BTC. Every API call syncs the local wallet state from Blink.
-
-### Wallet Sync
-
-Every payment call starts with `syncWallet(userId, walletId)`:
-
-1. Fetches the Blink wallet via GraphQL (`getWallets()`, `getBtcWallet()`)
-2. Upserts into `lightning_wallets` (`ON CONFLICT (user_id, provider) DO UPDATE`)
-3. Returns `{ localWallet, providerWallet }` — the providerWallet has the live balance
-
-This is idempotent — calling it multiple times never causes duplicate records.
-
-### Create Invoice (Receive Payment)
-
-```
-POST /api/v1/lightning/invoices
-Body: { "walletId": "...", "amountSats": 5000, "memo": "for coffee" }
-```
-
-1. `syncWallet`
-2. Call Blink: `lnInvoiceCreate(walletId, amount, memo)`
-3. Insert `lightning_transactions` with `direction = 'incoming'`, `status = 'pending'`
-
-Returns the BOLT11 `paymentRequest` the user can share.
-
-### Send Payment
-
-Three payment methods, all converge on a single `submitResolvedInvoicePayment()` call:
-
-#### BOLT11 (direct invoice)
-
-```
-POST /api/v1/lightning/payments/pay
-Body: { "walletId": "...", "paymentRequest": "lnbc..." }
-```
-
-#### LNURL-pay
-
-```
-POST /api/v1/lightning/payments/lnurl
-Body: { "walletId": "...", "lnurl": "LNURL1...", "amountSats": 100 }
-```
-
-1. Decode LNURL → URL
-2. `GET {url}` → resolution (`callback`, `minSendable`, `maxSendable`)
-3. `GET {callback}?amount={msats}` → BOLT11 invoice
-4. `submitResolvedInvoicePayment()`
-
-#### Lightning Address
-
-```
-POST /api/v1/lightning/payments/ln-address
-Body: { "walletId": "...", "lightningAddress": "alice@example.com", "amountSats": 100 }
-```
-
-Same as LNURL after resolving `alice@example.com` → `https://example.com/.well-known/lnurlp/alice`.
-
-#### Unified submission
-
-```js
-submitResolvedInvoicePayment(userId, { walletId, paymentRequest, ... })
-  1. syncWallet
-  2. Blink GraphQL: lnInvoicePaymentSend(walletId, paymentRequest)
-  3. Insert lightning_transactions (direction='outgoing')
-     - status: 'settled' if Blink returns SUCCESS/SETTLED, else 'pending'
-     - settled_at set immediately if status is settled
-```
-
-### Fee Estimation (Probe)
-
-```
-POST /api/v1/lightning/payments/probe
-Body: { "walletId": "...", "paymentRequest": "lnbc..." }
-```
-
-Calls Blink `lnInvoiceFeeProbe()` — read-only, does not deduct balance. Returns `feeSats`.
-
-### Payment Preview
-
-```
-POST /api/v1/lightning/payments/preview
-Body: { "walletId": "...", "paymentMethod": "lnurl_pay", "lnurl": "...", "amountSats": 100 }
-```
-
-Resolves the LNURL/address and optionally probes the fee without committing. Used to show the user a confirmation screen before they pay.
-
-### Proof of Payment
-
-```
-GET /api/v1/lightning/proof-of-payment?paymentRequest=lnbc...&limit=5
-```
-
-Calls Blink to fetch recent transactions and extracts `preImage` (proof). Updates local `lightning_transactions` records with `payment_preimage` and marks them `settled`. This is lazy — called on-demand, not pushed.
-
-### Transaction History
-
-```
-GET /api/v1/lightning/transactions?page=1&limit=20
-```
-
-Returns local `lightning_transactions` records (sorted by `created_at DESC`).
+Tips to external addresses (no SatsFlo `receiver_id`) appear in the sender's history with `lightning_address` set and `recipient: null`.
 
 ---
 
@@ -259,37 +133,39 @@ Returns local `lightning_transactions` records (sorted by `created_at DESC`).
 |------|----------|
 | 400 | Invalid address format, amount out of range |
 | 401 | Invalid webhook secret |
-| 404 | Transaction or user not found |
+| 404 | Transaction not found |
 | 409 | Transaction already completed or failed |
 | 410 | Invoice expired |
-| 422 | Recipient has no lightning address set |
-| 502 | LNURL endpoint unreachable, Blink API error |
-| 503 | `BLINK_API_KEY` not configured |
-| 504 | LNURL/Blink request timed out (10s default) |
+| 422 | Recipient has no lightning address set on their profile |
+| 502 | LNURL endpoint unreachable or returned an invalid response |
+| 504 | LNURL request timed out (10 s) |
+
+---
+
+## Database Table
+
+```
+gift_transactions
+  id               UUID PK
+  sender_id        UUID → users (nullable — external sender)
+  receiver_id      UUID → users (nullable — external recipient)
+  amount_sats      BIGINT
+  thread_id        UUID (optional)
+  bolt11_invoice   TEXT
+  payment_hash     VARCHAR(255) UNIQUE
+  lightning_address TEXT
+  note             TEXT
+  status           pending | completed | failed
+  expires_at       TIMESTAMPTZ (10 min from creation)
+  created_at       TIMESTAMPTZ
+```
 
 ---
 
 ## Configuration
 
 ```
-BLINK_API_URL=https://api.blink.sv/graphql   (default)
-BLINK_API_KEY=<required for Blink features>
-BLINK_BTC_WALLET_ID=<required>
-BLINK_API_TIMEOUT_MS=10000                   (default)
-WEBHOOK_SECRET=<optional, validates webhook calls>
+WEBHOOK_SECRET=<optional>   # if set, validates x-webhook-secret header on /payments/webhook
 ```
 
-Lightning features return `503` if `BLINK_API_KEY` is not set.
-
----
-
-## Database Tables
-
-| Table | Purpose |
-|-------|---------|
-| `gift_transactions` | Tip invoices (LNURL-pay system) |
-| `lightning_wallets` | Blink wallet state per user |
-| `lightning_transactions` | All Blink payment history |
-| `reward_ledger` | Reward earn/redeem tracking |
-
-See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for full column-level schema.
+No other payment-specific env vars are needed for the current implementation.

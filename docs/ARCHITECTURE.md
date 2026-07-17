@@ -21,7 +21,6 @@ React Native (Expo)
        │
        ├── PostgreSQL (pg pool, 20 connections)
        ├── Resend (email, HTTP)
-       ├── Blink GraphQL API (Lightning)
        ├── Cloudinary (file uploads)
        ├── Firebase (push notifications)
        └── Google OAuth2 (idToken verification)
@@ -215,22 +214,14 @@ sender_id, invite_code (6-char, unique), sharing flags (5 booleans), status (pen
 **partnerships**  
 user_a_id, user_b_id (unique pair), status, per-user sharing flags (10 total), per-user nicknames (4), per-user partner_mode flag (2), created_at, updated_at
 
-### Lightning & Payments
+### Payments
 
-**gift_transactions** (tips — LNURL-pay)  
+**gift_transactions** — the only active payments table  
 sender_id (nullable), receiver_id (nullable), amount_sats, thread_id, comment_id, bolt11_invoice, payment_hash (unique), lightning_address, note, expires_at (10 min), status (pending/completed/failed)
 
-**lightning_wallets**  
-user_id (unique), provider ('blink'), provider_wallet_id, wallet_currency ('BTC'), lightning_address, balance_sats, is_default, metadata JSONB, last_synced_at
+See [PAYMENTS.md](./PAYMENTS.md) for the full LNURL-pay + BOLT11 flow.
 
-**lightning_transactions**  
-user_id, wallet_id, provider, provider_transaction_id (unique), direction (incoming/outgoing), transaction_type (invoice/payment/reward/tip/payout), status (pending/settled/failed/expired/cancelled), amount_sats, fee_sats, payment_method (bolt11/lnurl_pay/ln_address), payment_request, payment_hash (unique), payment_preimage, destination, lnurl, lightning_address, memo, metadata JSONB, settled_at, expires_at
-
-**reward_ledger**  
-user_id, lightning_transaction_id, amount_sats, entry_type (earn/redeem/adjustment/tip_sent/tip_received/bonus), status (pending/available/claimed/reversed), reason, metadata JSONB, claimed_at
-
-**wallets** (simple per-user wallet)  
-user_id (unique), balance_sats, lightning_address
+> **Future tables (schema exists, not active):** `lightning_wallets`, `lightning_transactions`, `reward_ledger`, `wallets` — created by migrations for a planned in-app wallet feature. Not connected to any live frontend flow. Do not build on these for v1.
 
 ### DB Triggers
 
