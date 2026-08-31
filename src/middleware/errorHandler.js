@@ -7,6 +7,25 @@
 const logger = require('../utils/logger');
 const ApiResponse = require('../utils/response');
 
+const REDACTED_FIELDS = new Set([
+  'password',
+  'confirm_password',
+  'otp',
+  'token',
+  'refreshToken',
+  'idToken',
+  'reset_token',
+]);
+
+function sanitizeBody(body) {
+  if (!body || typeof body !== 'object') return body;
+  const safe = {};
+  for (const [k, v] of Object.entries(body)) {
+    safe[k] = REDACTED_FIELDS.has(k) ? '[REDACTED]' : v;
+  }
+  return safe;
+}
+
 const errorHandler = (err, req, res, next) => {
   // Log error details
   logger.error('Error caught by handler', {
@@ -14,7 +33,7 @@ const errorHandler = (err, req, res, next) => {
     stack: err.stack,
     path: req.path,
     method: req.method,
-    body: req.body,
+    body: sanitizeBody(req.body),
     user: req.user?.id,
   });
 
