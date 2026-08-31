@@ -62,6 +62,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanupTestUsers();
+  await pool.end();
 });
 
 // ─── Cycle Profile — partial update ──────────────────────────────────────────
